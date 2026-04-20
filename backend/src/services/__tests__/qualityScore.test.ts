@@ -43,4 +43,9 @@ describe('scoreModule', () => {
     ].join('\n');
     expect(scoreModule(content, 'GDPR')).toBe(100);
   });
+
+  it('no word count bonus above 500 words', () => {
+    const words = Array(501).fill('word').join(' ');
+    expect(scoreModule(words, 'GDPR')).toBe(0);
+  });
 });

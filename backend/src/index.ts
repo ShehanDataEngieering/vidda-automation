@@ -7,6 +7,14 @@ import { modulesRouter } from './routes/modules';
 
 dotenv.config();
 
+// Fail fast if required env vars are missing — avoids cryptic API errors at request time
+const REQUIRED_ENV = ['DATABASE_URL', 'ANTHROPIC_API_KEY'] as const;
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 

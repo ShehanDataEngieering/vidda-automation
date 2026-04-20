@@ -11,12 +11,19 @@ export const modulesRouter = Router();
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const CompanyIdSchema = z.string().uuid();
+
 modulesRouter.get('/:companyId', async (req: Request, res: Response) => {
+  const parsed = CompanyIdSchema.safeParse(req.params['companyId']);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid company ID — must be a UUID' });
+    return;
+  }
   try {
     const result = await db.query(
       `SELECT id, regulation, role, content, quality_score, status, created_at, updated_at
        FROM training_modules WHERE company_id = $1 ORDER BY created_at ASC`,
-      [req.params['companyId']]
+      [parsed.data]
     );
     res.json(result.rows);
   } catch (err) {
@@ -77,23 +84,32 @@ modulesRouter.post('/:moduleId/regenerate', async (req: Request, res: Response) 
   const moduleId = req.params['moduleId'] as string;
   const { reason } = parsed.data;
 
-  const modResult = await db.query<{ regulation: string; role: string }>(
-    `SELECT regulation, role FROM training_modules WHERE id = $1`,
-    [moduleId]
-  );
-  const mod = modResult.rows[0];
-  if (!mod) {
-    res.status(404).json({ error: 'Module not found' });
+  // DB lookup happens before SSE headers are sent so errors still return JSON
+  let regulation: string;
+  let role: string;
+  try {
+    const modResult = await db.query<{ regulation: string; role: string }>(
+      `SELECT regulation, role FROM training_modules WHERE id = $1`,
+      [moduleId]
+    );
+    const mod = modResult.rows[0];
+    if (!mod) {
+      res.status(404).json({ error: 'Module not found' });
+      return;
+    }
+    regulation = mod.regulation;
+    role = mod.role;
+  } catch (err) {
+    console.error('Regenerate pre-SSE db error:', err);
+    res.status(500).json({ error: 'Database error' });
     return;
   }
 
-  const { regulation, role } = mod;
-
+  // cors() middleware already sets Access-Control-Allow-Origin
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
   });
 
   const send = (event: SseEvent) =>

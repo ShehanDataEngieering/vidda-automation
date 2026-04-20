@@ -39,4 +39,10 @@ describe('searchChunks', () => {
     } as unknown as Pool;
     await expect(searchChunks(db, 'GDPR', 'All roles')).rejects.toThrow('DB down');
   });
+
+  it('returns an empty array when the db returns no rows', async () => {
+    const db = makeMockDb([]);
+    const result = await searchChunks(db, 'KYC', 'Customer Service');
+    expect(result).toEqual([]);
+  });
 });

@@ -1,16 +1,5 @@
-# Dependencies
 node_modules/
-
-# Build output
 dist/
-
-# Environment variables — never commit secrets
 .env
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS
-.DS_Store
-Thumbs.db
+*.js.map
+*.d.ts.map

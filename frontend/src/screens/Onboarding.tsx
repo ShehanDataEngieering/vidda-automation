@@ -9,7 +9,8 @@ interface Props {
 
 export default function Onboarding({ onCompanyCreated }: Props) {
   const [name, setName] = useState('');
-  const [industry, setIndustry] = useState(INDUSTRIES[0]);
+  // Use ?? fallback so noUncheckedIndexedAccess does not widen the type to string|undefined
+  const [industry, setIndustry] = useState(INDUSTRIES[0] ?? 'Banking');
   const [selectedRegs, setSelectedRegs] = useState<string[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);

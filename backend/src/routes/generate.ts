@@ -41,26 +41,36 @@ generateRouter.post('/', async (req: Request, res: Response) => {
 
   const { companyId } = parsed.data;
 
-  const companyResult = await db.query(
-    `SELECT id FROM companies WHERE id = $1`,
-    [companyId]
-  );
-  if (companyResult.rowCount === 0) {
-    res.status(404).json({ error: 'Company not found' });
+  // Both DB lookups happen before SSE headers are sent, so errors here can
+  // still return a normal JSON response rather than a broken SSE stream.
+  let profileRows: { regulation: string; score: number }[];
+  try {
+    const companyResult = await db.query(
+      `SELECT id FROM companies WHERE id = $1`,
+      [companyId]
+    );
+    if (companyResult.rowCount === 0) {
+      res.status(404).json({ error: 'Company not found' });
+      return;
+    }
+
+    const profilesResult = await db.query<{ regulation: string; score: number }>(
+      `SELECT regulation, score FROM risk_profiles WHERE company_id = $1`,
+      [companyId]
+    );
+    profileRows = profilesResult.rows;
+  } catch (err) {
+    console.error('Generate pre-SSE db error:', err);
+    res.status(500).json({ error: 'Database error' });
     return;
   }
 
-  const profilesResult = await db.query<{ regulation: string; score: number }>(
-    `SELECT regulation, score FROM risk_profiles WHERE company_id = $1`,
-    [companyId]
-  );
-
-  // SSE requires these headers before any data is written
+  // SSE requires these headers before any data is written.
+  // cors() middleware already sets Access-Control-Allow-Origin — no need to repeat it here.
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
   });
 
   const send = (event: SseEvent) =>
@@ -69,7 +79,7 @@ generateRouter.post('/', async (req: Request, res: Response) => {
   try {
     send({ type: 'stage', message: '🔍 Analysing compliance gaps...' });
 
-    const gaps = analyzeGaps(profilesResult.rows);
+    const gaps = analyzeGaps(profileRows);
 
     if (gaps.length === 0) {
       send({ type: 'stage', message: '✅ No gaps found — all scores above 70' });

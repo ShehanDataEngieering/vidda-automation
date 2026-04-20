@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ProgressBar from '../components/ProgressBar';
+import type { SseEvent } from '../types';
 
 interface ModuleCard {
   moduleId: string;
@@ -60,10 +61,11 @@ export default function Generation({ companyId }: Props) {
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            const event = JSON.parse(line.slice(6)) as Record<string, unknown>;
+            // Cast via the shared discriminated union — TypeScript narrows on event.type
+            const event = JSON.parse(line.slice(6)) as SseEvent;
 
             if (event.type === 'stage') {
-              setStageMsg(event.message as string);
+              setStageMsg(event.message);
               setStage((s) => Math.min(s + 1, STAGES.length - 1));
             }
 
@@ -72,19 +74,18 @@ export default function Generation({ companyId }: Props) {
             }
 
             if (event.type === 'module_start') {
-              const id = event.moduleId as string;
-              activeModuleId.current = id;
+              activeModuleId.current = event.moduleId;
               setStage(2);
               setModules((prev) => [
                 ...prev,
-                { moduleId: id, regulation: event.regulation as string, role: event.role as string, content: '', done: false },
+                { moduleId: event.moduleId, regulation: event.regulation, role: event.role, content: '', done: false },
               ]);
             }
 
-            if (event.type === 'chunk' && activeModuleId.current) {
-              const id = event.moduleId as string ?? activeModuleId.current;
+            if (event.type === 'chunk') {
+              const id = event.moduleId;
               setModules((prev) =>
-                prev.map((m) => m.moduleId === id ? { ...m, content: m.content + (event.content as string) } : m)
+                prev.map((m) => m.moduleId === id ? { ...m, content: m.content + event.content } : m)
               );
             }
 
@@ -92,7 +93,7 @@ export default function Generation({ companyId }: Props) {
               setStage(3);
               setModules((prev) =>
                 prev.map((m) =>
-                  m.moduleId === event.moduleId ? { ...m, done: true, qualityScore: event.qualityScore as number } : m
+                  m.moduleId === event.moduleId ? { ...m, done: true, qualityScore: event.qualityScore } : m
                 )
               );
             }
@@ -103,7 +104,7 @@ export default function Generation({ companyId }: Props) {
             }
 
             if (event.type === 'error') {
-              setError(event.message as string);
+              setError(event.message);
             }
           }
         }
