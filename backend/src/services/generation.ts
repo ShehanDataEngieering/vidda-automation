@@ -8,6 +8,7 @@
  * This grounds the module in real regulatory text rather than hallucinated content.
  */
 import type Anthropic from '@anthropic-ai/sdk';
+import type { MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { Chunk } from './vectorSearch';
 
 const SYSTEM_PROMPT = `You are a compliance training expert. Generate training modules using ONLY the provided regulatory excerpts. Every claim must reference a specific article. Format strictly as:
@@ -61,15 +62,11 @@ export async function* streamModule(
     messages: [{ role: 'user', content: parts.join('\n') }],
   });
 
-  // Yield only text delta events; ignore message_start, ping, etc.
-  for await (const event of stream as AsyncIterable<{
-    type: string;
-    delta?: { type: string; text?: string };
-  }>) {
+  // Use the SDK's MessageStreamEvent type for proper discriminated narrowing
+  for await (const event of stream as AsyncIterable<MessageStreamEvent>) {
     if (
       event.type === 'content_block_delta' &&
-      event.delta?.type === 'text_delta' &&
-      event.delta.text !== undefined
+      event.delta.type === 'text_delta'
     ) {
       yield event.delta.text;
     }

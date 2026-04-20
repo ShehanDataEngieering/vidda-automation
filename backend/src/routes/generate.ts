@@ -14,11 +14,13 @@
  *   { type: 'error',        message }
  */
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../db/client';
 import { analyzeGaps } from '../services/gapAnalysis';
 import { searchChunks } from '../services/vectorSearch';
 import { streamModule } from '../services/generation';
 import { scoreModule } from '../services/qualityScore';
+import type { SseEvent } from '../types';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const generateRouter = Router();
@@ -26,12 +28,18 @@ export const generateRouter = Router();
 // Single shared client — re-using the same instance avoids repeated auth overhead
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const GenerateBodySchema = z.object({
+  companyId: z.string().uuid(),
+});
+
 generateRouter.post('/', async (req: Request, res: Response) => {
-  const { companyId } = req.body as { companyId?: string };
-  if (!companyId) {
-    res.status(400).json({ error: 'companyId required' });
+  const parsed = GenerateBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+
+  const { companyId } = parsed.data;
 
   const companyResult = await db.query(
     `SELECT id FROM companies WHERE id = $1`,
@@ -55,7 +63,8 @@ generateRouter.post('/', async (req: Request, res: Response) => {
     'Access-Control-Allow-Origin': '*',
   });
 
-  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const send = (event: SseEvent) =>
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
 
   try {
     send({ type: 'stage', message: '🔍 Analysing compliance gaps...' });
@@ -88,7 +97,8 @@ generateRouter.post('/', async (req: Request, res: Response) => {
            VALUES ($1, $2, $3, 'pending') RETURNING id`,
           [companyId, gap.regulation, role]
         );
-        const moduleId = moduleInsert.rows[0].id;
+        const moduleId = moduleInsert.rows[0]?.id;
+        if (!moduleId) throw new Error('Failed to insert training module');
 
         send({ type: 'module_start', regulation: gap.regulation, role, moduleId });
 

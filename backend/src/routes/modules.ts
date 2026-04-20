@@ -4,6 +4,7 @@ import { db } from '../db/client';
 import { searchChunks } from '../services/vectorSearch';
 import { streamModule } from '../services/generation';
 import { scoreModule } from '../services/qualityScore';
+import type { SseEvent } from '../types';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const modulesRouter = Router();
@@ -15,7 +16,7 @@ modulesRouter.get('/:companyId', async (req: Request, res: Response) => {
     const result = await db.query(
       `SELECT id, regulation, role, content, quality_score, status, created_at, updated_at
        FROM training_modules WHERE company_id = $1 ORDER BY created_at ASC`,
-      [req.params.companyId]
+      [req.params['companyId']]
     );
     res.json(result.rows);
   } catch (err) {
@@ -37,7 +38,8 @@ modulesRouter.patch('/:moduleId', async (req: Request, res: Response) => {
     return;
   }
 
-  const { moduleId } = req.params;
+  // req.params values are always present when the route matches
+  const moduleId = req.params['moduleId'] as string;
   const { status, reviewer, reason } = parsed.data;
   const client = await db.connect();
   try {
@@ -61,20 +63,31 @@ modulesRouter.patch('/:moduleId', async (req: Request, res: Response) => {
   }
 });
 
+const RegenerateSchema = z.object({
+  reason: z.string().optional(),
+});
+
 modulesRouter.post('/:moduleId/regenerate', async (req: Request, res: Response) => {
-  const { moduleId } = req.params;
-  const { reason } = req.body as { reason?: string };
+  const parsed = RegenerateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const moduleId = req.params['moduleId'] as string;
+  const { reason } = parsed.data;
 
   const modResult = await db.query<{ regulation: string; role: string }>(
     `SELECT regulation, role FROM training_modules WHERE id = $1`,
     [moduleId]
   );
-  if (modResult.rowCount === 0) {
+  const mod = modResult.rows[0];
+  if (!mod) {
     res.status(404).json({ error: 'Module not found' });
     return;
   }
 
-  const { regulation, role } = modResult.rows[0];
+  const { regulation, role } = mod;
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -83,7 +96,8 @@ modulesRouter.post('/:moduleId/regenerate', async (req: Request, res: Response) 
     'Access-Control-Allow-Origin': '*',
   });
 
-  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const send = (event: SseEvent) =>
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
 
   try {
     const chunks = await searchChunks(db, regulation, role);
@@ -92,7 +106,7 @@ modulesRouter.post('/:moduleId/regenerate', async (req: Request, res: Response) 
     let fullContent = '';
     for await (const text of streamModule(anthropic, regulation, role, chunks, reason)) {
       fullContent += text;
-      send({ type: 'chunk', content: text });
+      send({ type: 'chunk', content: text, moduleId });
     }
 
     const qualityScore = scoreModule(fullContent, regulation);

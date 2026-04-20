@@ -30,7 +30,8 @@ companyRouter.post('/', async (req: Request, res: Response) => {
        RETURNING id`,
       [name, industry, regulations]
     );
-    const companyId = companyResult.rows[0].id;
+    const companyId = companyResult.rows[0]?.id;
+    if (!companyId) throw new Error('Insert returned no company id');
 
     for (const regulation of regulations) {
       const score = scores[regulation] ?? 0;
