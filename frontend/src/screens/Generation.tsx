@@ -1,49 +1,27 @@
 import { useEffect, useState } from 'react';
+import { Cpu, CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react';
 import type { SseEvent } from '../types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ModuleCard {
-  moduleId: string;
-  regulation: string;
-  role: string;
-  content: string;
-  qualityScore?: number;
-  citationGrounded?: boolean;
-  warnings?: string[];
-  done: boolean;
+  moduleId: string; regulation: string; role: string; content: string;
+  qualityScore?: number; citationGrounded?: boolean; warnings?: string[]; done: boolean;
 }
-
-interface Props {
-  companyId: string;
-  onComplete: () => void;
-}
-
-function scoreBadge(score: number) {
-  if (score >= 80) return 'bg-green-500/20 text-green-400 border-green-500/30';
-  if (score >= 60) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-  return 'bg-red-500/20 text-red-400 border-red-500/30';
-}
-
-const PIPELINE_STAGES = [
-  '📥 Analysing risk profile',
-  '🔍 Identifying gaps',
-  '📚 Searching regulatory DB',
-  '⚖️ Reranking results',
-  '🤖 Generating modules',
-  '✅ Quality check',
-  '👤 Awaiting human review',
-];
+interface Props { companyId: string; onComplete: () => void; }
 
 export default function Generation({ companyId, onComplete }: Props) {
-  const [stageMsg, setStageMsg] = useState('Starting pipeline...');
+  const [stageMsg, setStageMsg] = useState('Starting pipeline…');
   const [modules, setModules] = useState<ModuleCard[]>([]);
   const [complete, setComplete] = useState(false);
   const [totalModules, setTotalModules] = useState(0);
   const [error, setError] = useState('');
-  const [stageIdx, setStageIdx] = useState(0);
 
   useEffect(() => {
     let closed = false;
-
     async function run() {
       try {
         const res = await fetch('/api/generate', {
@@ -51,171 +29,120 @@ export default function Generation({ companyId, onComplete }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ companyId }),
         });
-
-        if (!res.ok || !res.body) {
-          setError('Failed to start generation.');
-          return;
-        }
-
+        if (!res.ok || !res.body) { setError('Failed to start generation.'); return; }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-
         while (!closed) {
-          const { value, done: streamDone } = await reader.read();
-          if (streamDone) break;
+          const { value, done } = await reader.read();
+          if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
+          const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            const event = JSON.parse(line.slice(6)) as SseEvent;
-
-            if (event.type === 'stage') {
-              setStageMsg(event.message);
-              setStageIdx(i => Math.min(i + 1, PIPELINE_STAGES.length - 1));
-            }
-            if (event.type === 'gap_found') {
-              setStageIdx(1);
-            }
-            if (event.type === 'module_start') {
-              setStageIdx(4);
-              setModules(prev => [
-                ...prev,
-                { moduleId: event.moduleId, regulation: event.regulation, role: event.role, content: '', done: false },
-              ]);
-            }
-            if (event.type === 'chunk') {
-              const id = event.moduleId;
-              setModules(prev =>
-                prev.map(m => m.moduleId === id ? { ...m, content: m.content + event.content } : m)
-              );
-            }
-            if (event.type === 'module_done') {
-              setStageIdx(5);
-              setModules(prev =>
-                prev.map(m =>
-                  m.moduleId === event.moduleId
-                    ? { ...m, done: true, qualityScore: event.qualityScore, citationGrounded: event.citationGrounded, warnings: event.warnings }
-                    : m
-                )
-              );
-            }
-            if (event.type === 'complete') {
-              setComplete(true);
-              setTotalModules(event.totalModules);
-              setStageIdx(PIPELINE_STAGES.length - 1);
-            }
-            if (event.type === 'error') {
-              setError(event.message);
-            }
+            const ev = JSON.parse(line.slice(6)) as SseEvent;
+            if (ev.type === 'stage') setStageMsg(ev.message);
+            if (ev.type === 'module_start') setModules(prev => [...prev, { moduleId: ev.moduleId, regulation: ev.regulation, role: ev.role, content: '', done: false }]);
+            if (ev.type === 'chunk') setModules(prev => prev.map(m => m.moduleId === ev.moduleId ? { ...m, content: m.content + ev.content } : m));
+            if (ev.type === 'module_done') setModules(prev => prev.map(m => m.moduleId === ev.moduleId ? { ...m, done: true, qualityScore: ev.qualityScore, citationGrounded: ev.citationGrounded, warnings: ev.warnings } : m));
+            if (ev.type === 'complete') { setComplete(true); setTotalModules(ev.totalModules); }
+            if (ev.type === 'error') setError(ev.message);
           }
         }
-      } catch {
-        if (!closed) setError('Connection error. Is the backend running?');
-      }
+      } catch { if (!closed) setError('Connection error. Is the backend running?'); }
     }
-
     run();
     return () => { closed = true; };
   }, [companyId]);
 
-  const completedCount = modules.filter(m => m.done).length;
+  const done = modules.filter(m => m.done).length;
+  const pct = modules.length > 0 ? Math.round((done / modules.length) * 100) : 0;
 
   return (
-    <div className="min-h-screen px-4 py-12 max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-1">
-          <span className="text-indigo-400">Vidda</span> Automation
-        </h1>
-        <p className="text-slate-400 text-sm">Generating compliance training modules</p>
+    <div className="p-6 max-w-3xl">
+      <div className="flex items-center gap-2 mb-6">
+        <Cpu className="h-5 w-5 text-muted-foreground" />
+        <div>
+          <h1 className="text-lg font-semibold">Generating Modules</h1>
+          <p className="text-sm text-muted-foreground">AI pipeline running — do not close this page</p>
+        </div>
       </div>
 
-      {/* Pipeline stage bar */}
-      <div className="bg-[#1E293B] rounded-xl p-5 mb-6">
-        <div className="flex gap-1.5 mb-4 flex-wrap">
-          {PIPELINE_STAGES.map((s, i) => (
-            <div key={s} className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-              i < stageIdx ? 'bg-indigo-600 text-white' :
-              i === stageIdx ? 'bg-indigo-500/30 text-indigo-300 ring-1 ring-indigo-500' :
-              'bg-slate-700/50 text-slate-500'
-            }`}>
-              {i < stageIdx ? '✓ ' : ''}{s.replace(/^[^\s]+ /, '')}
+      {/* Status card */}
+      <Card className="mb-6">
+        <CardContent className="pt-4 pb-4">
+          <p className="text-sm font-medium mb-3">{stageMsg}</p>
+          {modules.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Progress</span>
+                <span>{done} / {modules.length} modules ({pct}%)</span>
+              </div>
+              <Progress value={pct} />
             </div>
-          ))}
-        </div>
-        <p className="text-slate-300 text-sm font-medium">{stageMsg}</p>
-        {modules.length > 0 && (
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Modules generated</span>
-              <span>{completedCount} / {modules.length}</span>
-            </div>
-            <div className="w-full bg-slate-700 rounded-full h-1.5">
-              <div
-                className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: modules.length > 0 ? `${(completedCount / modules.length) * 100}%` : '0%' }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 text-red-400 text-sm">
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm mb-4">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
       {complete && modules.length === 0 && (
-        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-green-400 text-sm">
-          ✅ No compliance gaps detected — all regulation scores are above 70.
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400 text-sm mb-4">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          No compliance gaps detected — all scores are above threshold.
         </div>
       )}
 
       {/* Module cards */}
-      <div className="space-y-5">
+      <div className="space-y-3">
         {modules.map(mod => (
-          <div key={mod.moduleId} className="bg-[#1E293B] rounded-xl p-6">
-            <div className="flex items-start justify-between mb-3 gap-3">
-              <div>
-                <span className="text-indigo-400 font-semibold text-sm">{mod.regulation}</span>
-                <span className="text-slate-500 mx-2">·</span>
-                <span className="text-slate-300 text-sm">{mod.role}</span>
-              </div>
-              {mod.done && mod.qualityScore !== undefined && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${scoreBadge(mod.qualityScore)}`}>
-                    {mod.qualityScore}/100
-                  </span>
-                  <span className="text-xs" title="Citation grounding">
-                    {mod.citationGrounded ? '✅' : '⚠️'}
-                  </span>
+          <Card key={mod.moduleId}>
+            <CardHeader className="pb-2 pt-4 px-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm">{mod.regulation}</CardTitle>
+                  <span className="text-xs text-muted-foreground">— {mod.role}</span>
                 </div>
-              )}
-            </div>
-            {mod.done && mod.warnings && mod.warnings.length > 0 && (
-              <div className="mb-3 text-xs text-amber-400 space-y-0.5">
-                {mod.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+                <div className="flex items-center gap-2">
+                  {mod.done && mod.qualityScore !== undefined && (
+                    <Badge variant={mod.qualityScore >= 70 ? 'success' : 'warning'}>
+                      {mod.qualityScore}%
+                    </Badge>
+                  )}
+                  {mod.done ? (
+                    <Badge variant="success"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>
+                  ) : (
+                    <Badge variant="secondary"><span className="animate-pulse">Generating…</span></Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            {mod.warnings && mod.warnings.length > 0 && (
+              <div className="mx-4 mb-2 px-3 py-1.5 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-xs text-yellow-700 dark:text-yellow-400">
+                {mod.warnings.join(' · ')}
               </div>
             )}
-            <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
-              {mod.content}
-              {!mod.done && <span className="animate-pulse text-indigo-400">▌</span>}
-            </pre>
-          </div>
+            <CardContent className="px-4 pb-4">
+              <ScrollArea className="h-40">
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                  {mod.content}{!mod.done && <span className="animate-pulse text-primary">▌</span>}
+                </pre>
+              </ScrollArea>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {complete && totalModules > 0 && (
-        <div className="mt-8 text-center">
-          <button
-            onClick={onComplete}
-            className="bg-indigo-600 hover:bg-indigo-500 transition-colors rounded-xl px-8 py-3 font-semibold text-lg"
-          >
-            Review Modules →
-          </button>
+        <div className="mt-6">
+          <Button onClick={onComplete}>
+            Go to Review <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
     </div>

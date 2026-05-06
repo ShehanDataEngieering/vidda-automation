@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
+import { Shield, ChevronDown, ChevronRight, Printer, CheckCircle2 } from 'lucide-react';
 import type { TrainingModule } from '../types';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
-interface Review {
-  id: string;
-  action: string;
-  reviewer: string;
-  comment: string | null;
-  created_at: string;
-}
+interface Review { id: string; action: string; reviewer: string; comment: string | null; created_at: string; }
+interface Props { companyId: string; }
 
-interface Props {
-  companyId: string;
-}
+const COMPLIANCE_ITEMS = [
+  'Human review gate implemented',
+  'Full audit trail maintained',
+  'Citations traceable to source regulatory text',
+  'EU AI Act Article 14 human oversight satisfied',
+];
 
 export default function FinalOutput({ companyId }: Props) {
   const [modules, setModules] = useState<TrainingModule[]>([]);
@@ -26,30 +30,19 @@ export default function FinalOutput({ companyId }: Props) {
       const mods = (await res.json()) as TrainingModule[];
       const approved = mods.filter(m => m.status === 'approved');
       setModules(approved);
-
-      // Load audit trail for each module
       const allReviews: Record<string, Review[]> = {};
-      await Promise.all(
-        approved.map(async m => {
-          const r = await fetch(`/api/modules/${m.id}/reviews`);
-          if (r.ok) allReviews[m.id] = await r.json() as Review[];
-        })
-      );
+      await Promise.all(approved.map(async m => {
+        const r = await fetch(`/api/modules/${m.id}/reviews`);
+        if (r.ok) allReviews[m.id] = await r.json() as Review[];
+      }));
       setReviews(allReviews);
       setLoading(false);
     }
-    load();
+    void load();
   }, [companyId]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-slate-400">Loading final output...</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
 
-  // Group by role
   const byRole: Record<string, TrainingModule[]> = {};
   for (const mod of modules) {
     if (!byRole[mod.role]) byRole[mod.role] = [];
@@ -57,140 +50,104 @@ export default function FinalOutput({ companyId }: Props) {
   }
 
   return (
-    <div className="min-h-screen px-4 py-12 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-1">
-          <span className="text-indigo-400">Vidda</span> Final Training Programme
-        </h1>
-        <p className="text-slate-400 text-sm">{modules.length} approved module{modules.length !== 1 ? 's' : ''} ready for distribution</p>
-      </div>
-
-      {/* EU AI Act compliance panel */}
-      <div className="bg-[#1E293B] rounded-xl p-5 mb-8 border border-indigo-500/20">
-        <h2 className="text-sm font-semibold text-indigo-400 mb-3">EU AI Act Compliance Summary</h2>
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-green-400">
-            <span>✅</span>
-            <span>Human review gate implemented — all modules reviewed before distribution</span>
-          </div>
-          <div className="flex items-center gap-2 text-green-400">
-            <span>✅</span>
-            <span>Full audit trail maintained — all review actions logged with timestamps</span>
-          </div>
-          <div className="flex items-center gap-2 text-green-400">
-            <span>✅</span>
-            <span>Citations traceable to source regulatory text (FATF, AMLD, GDPR, DORA, MiFID II)</span>
-          </div>
-          <div className="flex items-center gap-2 text-green-400">
-            <span>✅</span>
-            <span>Complies with EU AI Act Article 14 human oversight requirements</span>
+    <div className="p-6 max-w-4xl">
+      <div className="flex items-start justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <h1 className="text-lg font-semibold">Final Training Programme</h1>
+            <p className="text-sm text-muted-foreground">{modules.length} approved module{modules.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
+        <Button variant="outline" onClick={() => window.print()}>
+          <Printer className="h-4 w-4 mr-2" /> Print / Export
+        </Button>
       </div>
+
+      {/* Compliance summary */}
+      <Card className="mb-6 border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" /> EU AI Act Compliance
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1.5">
+          {COMPLIANCE_ITEMS.map(item => (
+            <p key={item} className="text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 shrink-0" /> {item}
+            </p>
+          ))}
+        </CardContent>
+      </Card>
 
       {/* Modules by role */}
       {Object.entries(byRole).map(([role, roleMods]) => (
-        <div key={role} className="mb-8">
-          <h2 className="text-lg font-semibold mb-4 text-slate-200">
-            {role}
-            <span className="text-slate-500 text-sm font-normal ml-2">({roleMods.length} module{roleMods.length !== 1 ? 's' : ''})</span>
-          </h2>
-          <div className="space-y-4">
+        <div key={role} className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-sm font-semibold">{role}</h2>
+            <Badge variant="secondary">{roleMods.length} module{roleMods.length !== 1 ? 's' : ''}</Badge>
+          </div>
+          <div className="space-y-2">
             {roleMods.map(mod => (
-              <div key={mod.id} className="bg-[#1E293B] rounded-xl overflow-hidden">
-                <div
-                  className="p-5 cursor-pointer hover:bg-[#243347] transition-colors"
-                  onClick={() => setExpanded(expanded === mod.id ? null : mod.id)}
-                >
+              <Card key={mod.id}>
+                <CardHeader className="py-3 px-4">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-indigo-400 font-semibold text-sm">{mod.regulation}</span>
-                      <span className="text-slate-500 mx-2">·</span>
-                      <span className="text-slate-300 text-sm">{mod.role}</span>
-                    </div>
                     <div className="flex items-center gap-3">
-                      {mod.quality_score !== null && (
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                          mod.quality_score >= 80 ? 'bg-green-500/20 text-green-400' :
-                          mod.quality_score >= 60 ? 'bg-amber-500/20 text-amber-400' :
-                          'bg-red-500/20 text-red-400'
-                        }`}>
-                          Quality {mod.quality_score}/100
-                        </span>
+                      <span className="text-sm font-medium">{mod.regulation}</span>
+                      {mod.quality_score != null && (
+                        <Badge variant={mod.quality_score >= 70 ? 'success' : 'warning'}>
+                          {mod.quality_score}%
+                        </Badge>
                       )}
-                      <span className="text-xs" title="Citation grounding">
-                        {mod.citation_grounded ? '✅ Grounded' : '⚠️ Unverified'}
-                      </span>
-                      <span className="text-slate-500 text-xs">{expanded === mod.id ? '▲' : '▼'}</span>
+                      {mod.citation_grounded && (
+                        <Badge variant="outline" className="text-xs">Grounded</Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground">v{mod.version}</span>
                     </div>
+                    <Button size="sm" variant="ghost" onClick={() => setExpanded(expanded === mod.id ? null : mod.id)}>
+                      {expanded === mod.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </Button>
                   </div>
-                </div>
+                </CardHeader>
 
                 {expanded === mod.id && (
-                  <div className="border-t border-slate-700">
-                    <div className="p-5">
-                      <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
-                        {mod.content}
-                      </pre>
-                    </div>
-
-                    {/* Quality breakdown */}
-                    {mod.quality_breakdown && Object.keys(mod.quality_breakdown).length > 0 && (
-                      <div className="border-t border-slate-700 p-5">
-                        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Quality Breakdown</h3>
-                        <div className="space-y-1">
-                          {Object.entries(mod.quality_breakdown).map(([check, pts]) => (
-                            <div key={check} className="flex justify-between text-xs">
-                              <span className="text-slate-300">{check}</span>
-                              <span className={pts > 0 ? 'text-green-400' : 'text-slate-500'}>
-                                {pts > 0 ? `+${pts}` : 'n/a'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Audit trail */}
-                    {reviews[mod.id] && reviews[mod.id]!.length > 0 && (
-                      <div className="border-t border-slate-700 p-5">
-                        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Audit Trail</h3>
-                        <div className="space-y-2">
-                          {reviews[mod.id]!.map(r => (
-                            <div key={r.id} className="flex items-start gap-3 text-xs">
-                              <span className={`px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                                r.action === 'approved' ? 'bg-green-500/20 text-green-400' :
-                                r.action === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                                'bg-slate-700 text-slate-400'
-                              }`}>
-                                {r.action}
-                              </span>
-                              <span className="text-slate-400">{r.reviewer}</span>
-                              {r.comment && <span className="text-slate-500 italic">"{r.comment}"</span>}
-                              <span className="text-slate-600 ml-auto shrink-0">
-                                {new Date(r.created_at).toLocaleString()}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <>
+                    <Separator />
+                    <CardContent className="pt-3">
+                      <ScrollArea className="h-56 mb-3">
+                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                          {mod.content}
+                        </pre>
+                      </ScrollArea>
+                      {reviews[mod.id] && reviews[mod.id]!.length > 0 && (
+                        <>
+                          <Separator className="mb-3" />
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Audit Trail</p>
+                          <div className="space-y-1.5">
+                            {reviews[mod.id]!.map(r => (
+                              <div key={r.id} className="flex items-center gap-3 text-xs">
+                                <Badge
+                                  variant={r.action === 'approved' ? 'success' : r.action === 'rejected' ? 'destructive' : 'secondary'}
+                                  className="text-[10px]"
+                                >
+                                  {r.action}
+                                </Badge>
+                                <span className="text-muted-foreground">{r.reviewer}</span>
+                                {r.comment && <span className="italic text-muted-foreground">"{r.comment}"</span>}
+                                <span className="ml-auto text-muted-foreground/60">{new Date(r.created_at).toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </>
                 )}
-              </div>
+              </Card>
             ))}
           </div>
         </div>
       ))}
-
-      <div className="mt-8 flex justify-end">
-        <button
-          onClick={() => window.print()}
-          className="bg-indigo-600 hover:bg-indigo-500 transition-colors rounded-xl px-6 py-2.5 font-semibold"
-        >
-          Export / Print
-        </button>
-      </div>
     </div>
   );
 }

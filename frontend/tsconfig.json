@@ -19,7 +19,9 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "types": ["jest", "@testing-library/jest-dom", "vite/client"]
+    "types": ["jest", "@testing-library/jest-dom", "vite/client"],
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "jest.setup.ts"]
 }

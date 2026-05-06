@@ -1,73 +1,53 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/react';
+import { MessageSquare, Plus, Send, Loader2, FileText } from 'lucide-react';
 import { useApi } from '../utils/api';
 import type { ChatSession, ChatMessage, ChatCitation } from '../types';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-const NOT_FOUND = 'This question is not covered in the uploaded compliance documents. Contact your Compliance Officer.';
 
-function CitationTag({ c }: { c: ChatCitation }) {
-  const parts = [
-    c.sectionNumber ? `§${c.sectionNumber}` : null,
-    c.sectionHeading,
-    c.pageNumber ? `p.${c.pageNumber}` : null,
-  ].filter(Boolean).join(' · ');
+function Citations({ citations }: { citations: ChatCitation[] }) {
+  if (!citations.length) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 border border-white/5 text-slate-400">
-      <span className="text-slate-300 font-medium truncate max-w-[120px]">{c.documentName}</span>
-      {parts && <><span className="text-slate-600">·</span><span>{parts}</span></>}
-    </span>
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {citations.map((c, i) => (
+        <Badge key={i} variant="outline" className="text-[10px] font-normal gap-1">
+          <FileText className="h-2.5 w-2.5" />
+          {c.documentName}{c.sectionNumber ? ` · §${c.sectionNumber}` : ''}{c.pageNumber ? ` · p.${c.pageNumber}` : ''}
+        </Badge>
+      ))}
+    </div>
   );
 }
 
-function Bubble({ msg }: { msg: ChatMessage }) {
+function Message({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user';
-  const isNotFound = msg.answer_status === 'not_found';
-
   if (isUser) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[70%] px-4 py-2.5 rounded-2xl rounded-tr-sm bg-indigo-500 text-white text-sm leading-relaxed">
+      <div className="flex justify-end mb-4">
+        <div className="max-w-lg rounded-2xl rounded-br-sm bg-primary text-primary-foreground text-sm px-4 py-2.5">
           {msg.content}
         </div>
       </div>
     );
   }
-
   return (
-    <div className="flex gap-3">
-      <div className="w-7 h-7 rounded-full bg-slate-700 border border-white/10 flex items-center justify-center shrink-0 mt-1">
-        <span className="text-xs text-slate-300">V</span>
+    <div className="mb-4">
+      <div className={cn(
+        'max-w-2xl rounded-2xl rounded-bl-sm text-sm px-4 py-2.5',
+        msg.answer_status === 'not_found'
+          ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300'
+          : 'bg-card border border-border text-card-foreground'
+      )}>
+        <pre className="whitespace-pre-wrap font-sans leading-relaxed">{msg.content}</pre>
       </div>
-      <div className="flex-1 min-w-0">
-        {isNotFound ? (
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm">
-            {NOT_FOUND}
-          </div>
-        ) : (
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-[#1E293B] border border-white/5 text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
-            {msg.content}
-          </div>
-        )}
-        {!isNotFound && msg.citations.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2 pl-1">
-            {msg.citations.map((c, i) => <CitationTag key={i} c={c} />)}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StreamingBubble({ text }: { text: string }) {
-  return (
-    <div className="flex gap-3">
-      <div className="w-7 h-7 rounded-full bg-slate-700 border border-white/10 flex items-center justify-center shrink-0 mt-1">
-        <span className="text-xs text-slate-300">V</span>
-      </div>
-      <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-[#1E293B] border border-white/5 text-slate-200 text-sm leading-relaxed whitespace-pre-wrap max-w-[75%]">
-        {text || <span className="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse rounded-sm" />}
-      </div>
+      <Citations citations={msg.citations} />
     </div>
   );
 }
@@ -83,25 +63,20 @@ export default function ComplianceChat() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { loadSessions(); }, []);
+  useEffect(() => { void loadSessions(); }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, streamText]);
 
   async function loadSessions() {
-    try {
-      const res = await apiFetch('/api/chat/sessions');
-      if (res.ok) setSessions(await res.json());
-    } catch { /* ignore */ }
+    const res = await apiFetch('/api/chat/sessions');
+    if (res.ok) setSessions(await res.json() as ChatSession[]);
   }
 
   async function selectSession(id: string) {
     setActiveSession(id);
     setStreamText(null);
-    try {
-      const res = await apiFetch(`/api/chat/sessions/${id}/messages`);
-      if (res.ok) setMessages(await res.json());
-    } catch { /* ignore */ }
+    const res = await apiFetch(`/api/chat/sessions/${id}/messages`);
+    if (res.ok) setMessages(await res.json() as ChatMessage[]);
   }
 
   async function send() {
@@ -114,165 +89,146 @@ export default function ComplianceChat() {
     const isNew = !activeSession;
     const url = isNew ? '/api/chat/sessions' : `/api/chat/sessions/${activeSession}/messages`;
 
-    // Optimistic user bubble
-    const tempUserMsg: ChatMessage = {
-      id: 'tmp',
-      role: 'user',
-      content: q,
-      citations: [],
-      answer_status: 'answered',
-      created_at: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, tempUserMsg]);
+    setMessages(prev => [...prev, {
+      id: 'tmp', role: 'user', content: q, citations: [],
+      answer_status: 'answered', created_at: new Date().toISOString(),
+    }]);
 
     try {
       const token = await getToken();
       const res = await fetch(`${BASE}${url}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ question: q }),
       });
-
-      if (!res.ok || !res.body) {
-        setStreamText(null);
-        setSending(false);
-        return;
-      }
+      if (!res.ok || !res.body) { setSending(false); setStreamText(null); return; }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = '';
-      let sessionId = activeSession;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split('\n')) {
+        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
           if (!line.startsWith('data: ')) continue;
           try {
-            const ev = JSON.parse(line.slice(6));
-            if (ev.type === 'token') {
-              accumulated += ev.token;
-              setStreamText(accumulated);
-            } else if (ev.type === 'done') {
-              const assistantMsg: ChatMessage = {
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: accumulated,
-                citations: ev.citations ?? [],
-                answer_status: ev.answerStatus,
+            const ev = JSON.parse(line.slice(6)) as { type: string; token?: string; citations?: ChatCitation[]; answerStatus?: 'answered' | 'not_found' | 'error' };
+            if (ev.type === 'token') { accumulated += ev.token ?? ''; setStreamText(accumulated); }
+            else if (ev.type === 'done') {
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(), role: 'assistant', content: accumulated,
+                citations: ev.citations ?? [], answer_status: ev.answerStatus ?? 'answered',
                 created_at: new Date().toISOString(),
-              };
-              setMessages(prev => [...prev, assistantMsg]);
+              }]);
               setStreamText(null);
             }
           } catch { /* partial line */ }
         }
       }
 
-      // If new session, reload sessions and set active
       if (isNew) {
         const sessRes = await apiFetch('/api/chat/sessions');
         if (sessRes.ok) {
-          const newSessions: ChatSession[] = await sessRes.json();
+          const newSessions = await sessRes.json() as ChatSession[];
           setSessions(newSessions);
-          if (newSessions[0]) {
-            sessionId = newSessions[0].id;
-            setActiveSession(sessionId);
-          }
+          if (newSessions[0]) setActiveSession(newSessions[0].id);
         }
       }
-    } catch {
-      setStreamText(null);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    } catch { setStreamText(null); }
+    finally { setSending(false); }
   }
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar — session list */}
-      <aside className="w-64 border-r border-white/5 flex flex-col bg-[#111827]/50">
-        <div className="px-4 py-5 border-b border-white/5">
-          <p className="text-xs text-slate-500 uppercase tracking-wider">Conversations</p>
-        </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          <button
+    <div className="flex h-screen bg-background">
+      {/* Session sidebar */}
+      <aside className="w-56 border-r border-border flex flex-col bg-sidebar">
+        <div className="px-3 py-3 flex items-center justify-between border-b border-sidebar-border">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-sidebar-foreground/50" />
+            <span className="text-xs font-semibold text-sidebar-foreground">Conversations</span>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
             onClick={() => { setActiveSession(null); setMessages([]); setStreamText(null); }}
-            className="w-full text-left px-4 py-2.5 text-sm text-indigo-400 hover:bg-white/5 flex items-center gap-2"
+            title="New conversation"
           >
-            <span className="text-lg leading-none">+</span> New conversation
-          </button>
-          {sessions.map(s => (
-            <button
-              key={s.id}
-              onClick={() => selectSession(s.id)}
-              className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                activeSession === s.id ? 'bg-white/5 text-white' : 'text-slate-400 hover:text-white hover:bg-white/3'
-              }`}
-            >
-              <p className="truncate">{s.title ?? 'Conversation'}</p>
-              <p className="text-xs text-slate-600 mt-0.5">{new Date(s.created_at).toLocaleDateString()}</p>
-            </button>
-          ))}
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
         </div>
+        <ScrollArea className="flex-1">
+          {sessions.length === 0 ? (
+            <p className="text-xs text-sidebar-foreground/40 px-3 py-4">No conversations yet.</p>
+          ) : (
+            <div className="py-1">
+              {sessions.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => void selectSession(s.id)}
+                  className={cn(
+                    'w-full text-left px-3 py-2.5 transition-colors',
+                    activeSession === s.id
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50'
+                  )}
+                >
+                  <div className="text-xs font-medium truncate">{s.title ?? 'Conversation'}</div>
+                  <div className="text-[10px] text-sidebar-foreground/40 mt-0.5">{new Date(s.created_at).toLocaleDateString()}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
       </aside>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
-          {messages.length === 0 && !streamText && (
-            <div className="h-full flex flex-col items-center justify-center text-center">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4">
-                <span className="text-indigo-400 text-xl">◎</span>
+        <ScrollArea className="flex-1 px-6 py-4">
+          {messages.length === 0 && streamText === null && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                <MessageSquare className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h2 className="text-white font-medium">Compliance Assistant</h2>
-              <p className="text-slate-500 text-sm mt-2 max-w-xs">
-                Ask questions about your company's compliance documents. Answers are grounded in the uploaded PDFs.
+              <p className="text-sm font-medium">Compliance Assistant</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                Ask questions about your compliance documents. All answers are grounded in uploaded PDFs.
               </p>
             </div>
           )}
-          {messages.map(msg => <Bubble key={msg.id} msg={msg} />)}
-          {streamText !== null && <StreamingBubble text={streamText} />}
+          {messages.map(msg => <Message key={msg.id} msg={msg} />)}
+          {streamText !== null && (
+            <div className="mb-4">
+              <div className="max-w-2xl rounded-2xl rounded-bl-sm bg-card border border-border text-card-foreground text-sm px-4 py-2.5">
+                <pre className="whitespace-pre-wrap font-sans leading-relaxed">{streamText || '…'}</pre>
+              </div>
+            </div>
+          )}
           <div ref={bottomRef} />
-        </div>
+        </ScrollArea>
 
         {/* Input */}
-        <div className="px-8 py-5 border-t border-white/5">
-          <div className="flex gap-3 items-end bg-[#1E293B] border border-white/10 rounded-2xl px-4 py-3 focus-within:border-indigo-500/50 transition-colors">
-            <textarea
-              ref={textareaRef}
+        <div className="border-t border-border bg-background px-4 py-3">
+          <div className="flex gap-2 items-end max-w-4xl">
+            <Textarea
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
               placeholder="Ask a compliance question… (Enter to send)"
-              rows={1}
-              className="flex-1 bg-transparent text-white text-sm placeholder-slate-500 resize-none focus:outline-none leading-relaxed max-h-40 overflow-y-auto"
-              style={{ fieldSizing: 'content' } as React.CSSProperties}
+              rows={2}
               disabled={sending}
+              className="flex-1 resize-none text-sm"
             />
-            <button
-              onClick={send}
-              disabled={!input.trim() || sending}
-              className="shrink-0 w-8 h-8 rounded-xl bg-indigo-500 hover:bg-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-            >
-              <svg className="w-4 h-4 text-white rotate-90" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-              </svg>
-            </button>
+            <Button onClick={() => void send()} disabled={!input.trim() || sending} size="icon" className="shrink-0">
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
           </div>
-          <p className="text-[10px] text-slate-600 text-center mt-2">Answers are sourced strictly from uploaded compliance documents.</p>
         </div>
       </div>
     </div>
   );
 }
+
+void Separator;

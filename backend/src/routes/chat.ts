@@ -4,6 +4,7 @@ import { getUserContext } from '../utils/getUser';
 import { searchDocumentChunks } from '../services/documentSearch';
 import { streamChatAnswer, buildCitations, detectAnswerStatus } from '../services/chatGeneration';
 import { db as pool } from '../db/client';
+import { logger } from '../utils/logger';
 
 export const chatRouter = Router();
 
@@ -25,7 +26,9 @@ async function streamAnswer(
   );
 
   // Retrieve relevant chunks
+  logger.info('Chat search', { sessionId, chunks: 0, question: question.slice(0, 80) });
   const chunks = await searchDocumentChunks(question, companyId);
+  logger.info('Chunks retrieved', { sessionId, count: chunks.length });
   const citations = buildCitations(chunks);
 
   // Open SSE stream
@@ -35,6 +38,7 @@ async function streamAnswer(
     Connection: 'keep-alive',
   });
 
+  logger.info('Chat stream started', { sessionId });
   let fullText = '';
   try {
     for await (const token of streamChatAnswer(question, chunks, history)) {
@@ -51,11 +55,12 @@ async function streamAnswer(
       [sessionId, fullText, JSON.stringify(citations), answerStatus],
     );
 
+    logger.info('Chat stream done', { sessionId, answerStatus, tokens: fullText.length });
     res.write(
       `data: ${JSON.stringify({ type: 'done', answerStatus, citations })}\n\n`,
     );
   } catch (err) {
-    console.error('Chat stream error:', err);
+    logger.error('Chat stream error', { sessionId, error: String(err) });
     await pool.query(
       `INSERT INTO chat_messages (session_id, role, content, answer_status)
        VALUES ($1, 'assistant', $2, 'error')`,

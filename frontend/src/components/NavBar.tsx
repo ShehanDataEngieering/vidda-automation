@@ -1,4 +1,11 @@
 import { UserButton } from '@clerk/react';
+import {
+  Building2, FileText, Shield, CheckSquare, Upload,
+  MessageSquare, BookOpen, ChevronRight, type LucideIcon
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Separator } from '@/components/ui/separator';
 
 type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents';
 type EmployeeScreen = 'chat' | 'training';
@@ -10,65 +17,75 @@ interface NavBarProps {
   onNavigate: (s: Screen) => void;
 }
 
-const adminNav: { id: AdminScreen; label: string; icon: string }[] = [
-  { id: 'onboarding', label: 'Company', icon: '⬡' },
-  { id: 'generation', label: 'Generate', icon: '⚡' },
-  { id: 'review', label: 'Review', icon: '✓' },
-  { id: 'documents', label: 'Documents', icon: '⬢' },
+const adminNav: { id: AdminScreen; label: string; icon: LucideIcon }[] = [
+  { id: 'onboarding', label: 'Company Setup', icon: Building2 },
+  { id: 'generation', label: 'Generate Modules', icon: FileText },
+  { id: 'review', label: 'Review', icon: CheckSquare },
+  { id: 'output', label: 'Final Output', icon: Shield },
+  { id: 'documents', label: 'Documents', icon: Upload },
 ];
 
-const employeeNav: { id: EmployeeScreen; label: string; icon: string }[] = [
-  { id: 'chat', label: 'Chat', icon: '◎' },
-  { id: 'training', label: 'Training', icon: '▣' },
+const employeeNav: { id: EmployeeScreen; label: string; icon: LucideIcon }[] = [
+  { id: 'chat', label: 'Compliance Chat', icon: MessageSquare },
+  { id: 'training', label: 'My Training', icon: BookOpen },
 ];
 
 export default function NavBar({ role, screen, onNavigate }: NavBarProps) {
   const items = role === 'admin' ? adminNav : employeeNav;
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[220px] bg-[#111827] border-r border-white/5 flex flex-col z-10">
+    <aside className="fixed left-0 top-0 h-screen w-56 bg-sidebar border-r border-sidebar-border flex flex-col z-40">
       {/* Logo */}
-      <div className="px-6 py-6 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">V</div>
-          <span className="text-white font-semibold text-sm tracking-wide">Vidda</span>
+      <div className="flex items-center gap-2 px-4 py-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
+          <Shield className="h-4 w-4 text-primary-foreground" />
         </div>
-        <p className="text-[10px] text-slate-500 mt-1 ml-10 capitalize">{role} portal</p>
+        <div>
+          <p className="text-sm font-semibold text-sidebar-foreground">Vidda</p>
+          <p className="text-[10px] text-sidebar-foreground/50 capitalize">{role} portal</p>
+        </div>
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {items.map((item) => {
-          const active = screen === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id as Screen)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                active
-                  ? 'bg-indigo-500/15 text-indigo-400 font-medium'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <span className="text-base w-5 text-center">{item.icon}</span>
-              <span>{item.label}</span>
-              {active && <span className="ml-auto w-1 h-4 rounded-full bg-indigo-400" />}
-            </button>
-          );
-        })}
+      <Separator className="bg-sidebar-border" />
+
+      {/* Nav links */}
+      <nav className="flex-1 overflow-y-auto py-3 px-2">
+        <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+          {role === 'admin' ? 'Administration' : 'Employee'}
+        </p>
+        <div className="space-y-0.5">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = screen === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onNavigate(item.id as Screen)}
+                className={cn(
+                  'group w-full flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
+                  active
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                )}
+              >
+                <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-sidebar-primary' : 'text-sidebar-foreground/50 group-hover:text-sidebar-primary')} />
+                <span className="flex-1 text-left">{item.label}</span>
+                {active && <ChevronRight className="h-3 w-3 text-sidebar-foreground/40" />}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      {/* User */}
-      <div className="px-6 py-5 border-t border-white/5 flex items-center gap-3">
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: 'w-8 h-8',
-              userButtonPopoverCard: 'bg-[#1E293B] border border-white/10',
-            },
-          }}
-        />
-        <span className="text-xs text-slate-500 truncate">Account</span>
+      <Separator className="bg-sidebar-border" />
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-3 py-3">
+        <div className="flex items-center gap-2">
+          <UserButton />
+          <span className="text-xs text-sidebar-foreground/50 capitalize">{role}</span>
+        </div>
+        <ThemeToggle />
       </div>
     </aside>
   );

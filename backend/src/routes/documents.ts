@@ -4,6 +4,7 @@ import { requireSignedIn, requireRole } from '../middleware/requireAuth';
 import { getUserContext } from '../utils/getUser';
 import { chunkPdf } from '../services/pdfChunker';
 import { db as pool } from '../db/client';
+import { logger } from '../utils/logger';
 
 export const documentsRouter = Router();
 
@@ -44,12 +45,16 @@ documentsRouter.post(
     );
     const documentId = rows[0].id;
 
+    logger.info('Document upload accepted', { documentId, file: originalname, size, userId: user.userId });
+
     // Background chunking — respond immediately
     res.status(202).json({ documentId, status: 'processing' });
 
     setImmediate(async () => {
+      logger.info('PDF chunking started', { documentId, file: originalname });
       try {
         const { chunks, crossRefs } = await chunkPdf(buffer);
+        logger.info('PDF chunked', { documentId, chunks: chunks.length, crossRefs: crossRefs.length });
 
         // Batch insert chunks
         for (const chunk of chunks) {
@@ -103,8 +108,9 @@ documentsRouter.post(
           `UPDATE documents SET status = 'ready', total_chunks = $1 WHERE id = $2`,
           [chunks.length, documentId],
         );
+        logger.info('Document ready', { documentId, totalChunks: chunks.length });
       } catch (err) {
-        console.error('PDF chunking error:', err);
+        logger.error('PDF chunking failed', { documentId, error: String(err) });
         await pool.query(
           `UPDATE documents SET status = 'error', error_message = $1 WHERE id = $2`,
           [String(err), documentId],
