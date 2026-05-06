@@ -1,25 +1,80 @@
-/**
- * Scores a generated training module against a five-point rubric (0–100).
- * Each criterion is worth 20 points. The rubric is intentionally lightweight —
- * it checks structural completeness and citation presence, not semantic quality.
- * Semantic review is left to the human reviewer in Week 2.
- */
-export function scoreModule(content: string, regulationName: string): number {
+import type { QualityResult, SearchResult } from '../types';
+
+function verifyCitationGrounding(content: string, sourceChunks: SearchResult[]): boolean {
+  const articleRefs = content.match(/Article\s+[\d\w-]+/gi) ?? [];
+  const recommendationRefs = content.match(/Recommendation\s+\d+/gi) ?? [];
+  const allRefs = [...articleRefs, ...recommendationRefs];
+
+  if (allRefs.length === 0) return false;
+
+  return allRefs.every(ref => {
+    const refNum = ref.replace(/^Article\s+|^Recommendation\s+/i, '').trim();
+    return sourceChunks.some(
+      c =>
+        c.article_reference.includes(refNum) ||
+        c.article_number === refNum ||
+        c.content.includes(ref)
+    );
+  });
+}
+
+export function scoreModule(
+  content: string,
+  regulation: string,
+  sourceChunks: SearchResult[]
+): QualityResult {
   let score = 0;
+  const breakdown: Record<string, number> = {};
+  const warnings: string[] = [];
 
-  // Ensures the module is actually about the target regulation
-  if (content.includes(regulationName)) score += 20;
+  // Check 1: Regulation name present (+20)
+  if (content.toLowerCase().includes(regulation.toLowerCase())) {
+    score += 20;
+    breakdown['Regulation referenced'] = 20;
+  } else {
+    warnings.push('Regulation name not found in content');
+  }
 
-  // Claude's system prompt requires citations; this confirms the format was followed
-  if (/Article\s+\d+/i.test(content)) score += 20;
+  // Check 2: Article citation present (+20)
+  if (/article\s+\d+/i.test(content)) {
+    score += 20;
+    breakdown['Article citation present'] = 20;
+  } else {
+    warnings.push('No article reference found');
+  }
 
-  // 200–500 words: long enough to be substantive, short enough to be consumable
-  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
-  if (wordCount >= 200 && wordCount <= 500) score += 20;
+  // Check 3: Word count 200-600 (+20)
+  const wordCount = content.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 200 && wordCount <= 600) {
+    score += 20;
+    breakdown['Appropriate length'] = 20;
+  } else {
+    warnings.push(`Word count ${wordCount} outside 200-600 range`);
+  }
 
-  // Structural sections required by the system prompt
-  if (content.includes('OBJECTIVES')) score += 20;
-  if (content.includes('ASSESSMENT')) score += 20;
+  // Check 4: OBJECTIVES section (+20)
+  if (/OBJECTIVES/i.test(content)) {
+    score += 20;
+    breakdown['Learning objectives present'] = 20;
+  } else {
+    warnings.push('No OBJECTIVES section found');
+  }
 
-  return score;
+  // Check 5: ASSESSMENT section (+20)
+  if (/ASSESSMENT/i.test(content)) {
+    score += 20;
+    breakdown['Assessment question present'] = 20;
+  } else {
+    warnings.push('No ASSESSMENT section found');
+  }
+
+  // Check 6: Citation grounding (informational — no score penalty)
+  const citationGrounded = verifyCitationGrounding(content, sourceChunks);
+  if (citationGrounded) {
+    breakdown['Citations grounded in source'] = 0;
+  } else {
+    warnings.push('Some citations could not be verified against source documents');
+  }
+
+  return { score, breakdown, citationGrounded, warnings };
 }

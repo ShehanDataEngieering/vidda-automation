@@ -1,33 +1,58 @@
 /**
- * Shared domain types for the Vidda Automation API.
- *
- * Discriminated unions are used throughout so the compiler can narrow event
- * shapes at the call site without manual type assertions.
+ * Shared domain types for the Vidda Automation API — V2.
  */
 
 // ---------------------------------------------------------------------------
-// SSE events — streamed from POST /api/generate and POST /api/modules/:id/regenerate
+// Service types
+// ---------------------------------------------------------------------------
+
+export interface SearchResult {
+  id: string;
+  regulation: string;
+  article_number: string;
+  article_reference: string;
+  entities: string[];
+  content: string;
+  bm25Score: number;
+  finalScore: number;
+}
+
+export interface Gap {
+  regulation: string;
+  score: number;
+  severity: 'critical' | 'high' | 'medium';
+  affectedRoles: string[];
+}
+
+export interface QualityResult {
+  score: number;
+  breakdown: Record<string, number>;
+  citationGrounded: boolean;
+  warnings: string[];
+}
+
+// ---------------------------------------------------------------------------
+// SSE events — V2
 // ---------------------------------------------------------------------------
 
 export type SseEvent =
   | { type: 'stage'; message: string }
-  | { type: 'gap_found'; regulation: string; score: number; roles: string[] }
+  | { type: 'gap_found'; regulation: string; score: number; severity: string; roles: string[] }
   | { type: 'module_start'; regulation: string; role: string; moduleId: string }
   | { type: 'chunk'; content: string; moduleId: string }
-  | { type: 'module_done'; moduleId: string; qualityScore: number }
-  | { type: 'done' }
+  | { type: 'module_done'; moduleId: string; qualityScore: number; citationGrounded: boolean; warnings: string[] }
+  | { type: 'complete'; totalModules: number }
   | { type: 'error'; message: string };
 
 // ---------------------------------------------------------------------------
-// API request bodies
+// API request/response bodies
 // ---------------------------------------------------------------------------
 
 export interface CreateCompanyBody {
   name: string;
   industry: string;
-  regulations: string[];
-  /** Score per regulation key, 0–100 */
-  scores: Record<string, number>;
+  size?: string;
+  regulations: Record<string, number>;
 }
 
 export interface GenerateBody {
@@ -35,21 +60,13 @@ export interface GenerateBody {
 }
 
 export interface PatchModuleBody {
-  status: 'approved' | 'rejected';
-  reviewer: string;
-  reason?: string;
+  action: 'approved' | 'rejected';
+  reviewer?: string;
+  comment?: string;
 }
 
 export interface RegenerateBody {
   reason?: string;
-}
-
-// ---------------------------------------------------------------------------
-// API response shapes
-// ---------------------------------------------------------------------------
-
-export interface CreateCompanyResponse {
-  companyId: string;
 }
 
 export interface TrainingModule {
@@ -59,7 +76,10 @@ export interface TrainingModule {
   role: string;
   content: string | null;
   quality_score: number | null;
+  quality_breakdown: Record<string, number> | null;
+  citation_grounded: boolean;
   status: 'pending' | 'approved' | 'rejected';
+  version: number;
   created_at: string;
   updated_at: string;
 }

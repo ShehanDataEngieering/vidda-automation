@@ -1,48 +1,88 @@
-/**
- * Retrieves the most relevant regulatory chunks for a given regulation + role.
- *
- * Week 1: Uses PostgreSQL full-text search (FTS) with ts_rank ordering.
- *   No embeddings required — works immediately with the seeded sample data.
- *
- * Week 2 upgrade path: Replace the FTS query body with:
- *   SELECT ... FROM regulatory_chunks
- *   ORDER BY embedding <=> $1 LIMIT $2
- *   and pass a real 1536-dim embedding vector from OpenAI text-embedding-3-small.
- *   Uncomment the ivfflat index in schema.sql first.
- *
- * `db` is injected rather than imported from client.ts so this function
- * is unit-testable without a live Supabase connection.
- */
-import type { Pool } from 'pg';
+import { db } from '../db/client';
+import type { SearchResult } from '../types';
 
-export interface Chunk {
-  id: string;
-  regulation_name: string;
-  article_reference: string;
-  content: string;
+const ROLE_KEYWORDS: Record<string, string[]> = {
+  'Compliance Officer': ['compliance', 'AML', 'responsibility', 'obligation', 'reporting'],
+  'Front Office': ['customer', 'transaction', 'investment', 'advice', 'suitability'],
+  'Onboarding Team': ['CDD', 'identity', 'verification', 'due diligence', 'customer'],
+  'IT Team': ['ICT', 'security', 'technical', 'encryption', 'resilience'],
+  'Risk Officer': ['risk', 'assessment', 'enhanced', 'high-risk', 'monitoring'],
+  'Senior Management': ['senior', 'approval', 'oversight', 'governance', 'management'],
+  'Customer Service': ['customer', 'request', 'erasure', 'data', 'rights'],
+  'HR Department': ['employee', 'training', 'staff', 'personnel'],
+  'All Staff': ['training', 'compliance', 'regulation', 'policy'],
+};
+
+function getRoleKeywords(role: string): string[] {
+  return ROLE_KEYWORDS[role] ?? ['compliance', 'regulation'];
+}
+
+function rerankChunks(chunks: any[], regulation: string, role: string): SearchResult[] {
+  return chunks
+    .map(chunk => {
+      let finalScore: number = Number(chunk.bm25_score) || 0;
+
+      if ((chunk.article_reference as string).toLowerCase().includes(regulation.toLowerCase())) {
+        finalScore += 0.3;
+      }
+
+      const roleKws = getRoleKeywords(role);
+      const entities: string[] = Array.isArray(chunk.entities) ? chunk.entities : [];
+      const entityMatches = entities.filter((e: string) =>
+        roleKws.some(k => e.toLowerCase().includes(k.toLowerCase()))
+      ).length;
+      finalScore += entityMatches * 0.1;
+
+      const contentLower = (chunk.content as string).toLowerCase();
+      if (contentLower.includes('training') || contentLower.includes('competence')) {
+        finalScore += 0.15;
+      }
+
+      return {
+        id: String(chunk.id),
+        regulation: String(chunk.regulation),
+        article_number: String(chunk.article_number ?? ''),
+        article_reference: String(chunk.article_reference),
+        entities,
+        content: String(chunk.content),
+        bm25Score: Number(chunk.bm25_score) || 0,
+        finalScore,
+      } satisfies SearchResult;
+    })
+    .sort((a, b) => b.finalScore - a.finalScore);
 }
 
 export async function searchChunks(
-  db: Pool,
   regulation: string,
   role: string,
-  limit = 5
-): Promise<Chunk[]> {
-  // Combine regulation + role into the FTS query so results are biased toward
-  // content that is both regulation-specific and role-relevant
-  const ftsQuery = `${regulation} ${role} compliance`;
+  topK = 5
+): Promise<SearchResult[]> {
+  const searchTerm = `${regulation} compliance ${role}`;
 
-  const result = await db.query<Chunk>(
-    `SELECT id, regulation_name, article_reference, content
+  const result = await db.query(
+    `SELECT
+       id, regulation, article_number, article_reference, entities, content,
+       ts_rank(
+         to_tsvector('english', content || ' ' || COALESCE(array_to_string(entities, ' '), '')),
+         plainto_tsquery('english', $1)
+       ) AS bm25_score
      FROM regulatory_chunks
-     WHERE regulation_name ILIKE $1
-        OR to_tsvector('english', content) @@ plainto_tsquery('english', $2)
-     ORDER BY
-       -- Exact regulation name matches always rank above FTS matches
-       CASE WHEN regulation_name ILIKE $1 THEN 0 ELSE 1 END,
-       ts_rank(to_tsvector('english', content), plainto_tsquery('english', $2)) DESC
-     LIMIT $3`,
-    [regulation, ftsQuery, limit]
+     WHERE regulation = $2
+       AND to_tsvector('english', content) @@ plainto_tsquery('english', $1)
+     ORDER BY bm25_score DESC
+     LIMIT 10`,
+    [searchTerm, regulation]
   );
-  return result.rows;
+
+  if (result.rows.length === 0) {
+    // Fallback: return all chunks for this regulation if FTS returns nothing
+    const fallback = await db.query(
+      `SELECT id, regulation, article_number, article_reference, entities, content, 0.1 AS bm25_score
+       FROM regulatory_chunks WHERE regulation = $1 LIMIT 10`,
+      [regulation]
+    );
+    return rerankChunks(fallback.rows, regulation, role).slice(0, topK);
+  }
+
+  return rerankChunks(result.rows, regulation, role).slice(0, topK);
 }
