@@ -12,7 +12,7 @@ import { trainingRouter } from './routes/trainingDashboard';
 
 dotenv.config();
 
-const REQUIRED_ENV = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY'] as const;
+const REQUIRED_ENV = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY'] as const;
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(`Missing required environment variable: ${key}`);
@@ -25,10 +25,11 @@ const PORT = process.env.PORT ?? 3001;
 app.use(cors());
 app.use(express.json());
 
+// Health check before Clerk — no auth needed
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
 // Clerk session parsing on every request (does not block unauthenticated requests)
 app.use(clerkMiddleware());
-
-app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // V2 admin pipeline — unchanged
 app.use('/api/company', companyRouter);
