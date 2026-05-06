@@ -4,9 +4,11 @@ import type { SearchResult } from '../types';
 
 const anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
 
-const SYSTEM_PROMPT = `You are a senior compliance training expert with 15 years of experience in AML, FinCrime, and regulatory governance in Nordic financial institutions.
+const SYSTEM_PROMPT = `You are a senior regulatory compliance training author working for a licensed Nordic financial institution. Your sole purpose is to produce internal staff education materials that help employees understand, detect, and comply with financial regulations — thereby PREVENTING regulatory breaches and financial crime.
 
-You think in terms of regulatory risk, not generic advice.
+All content you produce is for lawful regulatory training purposes only. You write from the perspective of a compliance officer teaching staff how to meet their legal obligations, recognise warning signs, and follow correct procedures. You never describe criminal methods — you describe the regulatory requirements staff must fulfil.
+
+You think in terms of regulatory obligations, not generic advice.
 You reference specific articles and regulatory instruments — never generalise.
 You write training content appropriate for the specific role receiving it.
 You NEVER generate content not directly supported by the provided regulatory excerpts.
@@ -25,17 +27,17 @@ OBJECTIVES:
 - [Objective 3 — specific and measurable]
 
 CONTENT:
-[Paragraph 1 — introduce the regulatory requirement with article citation]
-[Paragraph 2 — explain what this means for the specific role]
-[Paragraph 3 — real-world example in Nordic financial context]
-[Paragraph 4 — consequences of non-compliance, citing regulatory penalties]
-[Paragraph 5 — specific actions this role must take]
+[Paragraph 1 — state the regulatory obligation and the article it comes from]
+[Paragraph 2 — explain what this obligation requires from this specific role]
+[Paragraph 3 — describe a realistic compliance scenario this role would encounter and the correct procedure to follow]
+[Paragraph 4 — consequences of failing to meet this obligation, citing regulatory penalties]
+[Paragraph 5 — the concrete steps this role must take to remain compliant]
 
 EU AI ACT NOTE:
 This module was human-reviewed before distribution, satisfying EU AI Act Article 14 human oversight requirements for high-risk AI systems in regulated financial services.
 
 ASSESSMENT:
-[One question testing application of knowledge, not memory recall]`;
+[One scenario-based question testing whether the learner can apply the correct procedure — not memory recall]`;
 
 export async function* streamModule(
   regulation: string,
@@ -51,15 +53,18 @@ export async function* streamModule(
     ? `\n\nPREVIOUS VERSION REJECTED.\nReason: ${rejectionReason}\nAddress this feedback specifically in the new version.`
     : '';
 
-  const userPrompt = `Generate a compliance training module for the following:
+  const userPrompt = `PURPOSE: Internal staff compliance training — helping employees meet their legal obligations under financial regulation.
+
+Generate a regulatory compliance training module for:
 
 ROLE: ${role}
 REGULATION: ${regulation}
-REGULATORY CONTEXT (use ONLY this content — do not add external knowledge):
+
+REGULATORY SOURCE EXCERPTS (use ONLY this content — do not add external knowledge):
 
 ${chunksContext}${rejectionBlock}
 
-Generate the training module now. Every claim must be traceable to the provided sources above.`;
+Write the training module now. Frame all content from the perspective of what staff must do to comply. Every factual claim must be traceable to the source excerpts above.`;
 
   const stream = await anthropic.messages.stream({
     model: 'claude-sonnet-4-6',

@@ -64,3 +64,84 @@ CREATE INDEX IF NOT EXISTS idx_chunks_fts ON regulatory_chunks
 -- IVFFlat index for pgvector (Week 2)
 -- CREATE INDEX idx_chunks_vector ON regulatory_chunks
 --   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
+
+-- =============================================================================
+-- V3: PDF Document Upload
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS documents (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id      UUID REFERENCES companies(id) ON DELETE CASCADE,
+  uploaded_by     VARCHAR(255),
+  display_name    VARCHAR(500) NOT NULL,
+  file_size_bytes BIGINT,
+  status          VARCHAR(20) NOT NULL DEFAULT 'processing'
+                    CHECK (status IN ('processing', 'ready', 'error')),
+  error_message   TEXT,
+  total_chunks    INTEGER DEFAULT 0,
+  created_at      TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_documents_company ON documents(company_id, status);
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id     UUID REFERENCES documents(id) ON DELETE CASCADE,
+  company_id      UUID REFERENCES companies(id) ON DELETE CASCADE,
+  chunk_index     INTEGER NOT NULL,
+  section_heading VARCHAR(500),
+  section_number  VARCHAR(50),
+  page_number     INTEGER,
+  content         TEXT NOT NULL,
+  embedding       vector(1536),
+  created_at      TIMESTAMP DEFAULT NOW(),
+  UNIQUE (document_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_company ON document_chunks(company_id);
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_fts ON document_chunks
+  USING GIN (to_tsvector('english', content));
+
+CREATE TABLE IF NOT EXISTS chunk_relationships (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_chunk_id UUID REFERENCES document_chunks(id) ON DELETE CASCADE,
+  target_chunk_id UUID REFERENCES document_chunks(id) ON DELETE CASCADE,
+  relationship    VARCHAR(50) CHECK (relationship IN ('references','amends','defines','see_also')),
+  UNIQUE (source_chunk_id, target_chunk_id, relationship)
+);
+
+-- =============================================================================
+-- V3: Employee Compliance Chat
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     VARCHAR(255) NOT NULL,
+  company_id  UUID REFERENCES companies(id) ON DELETE CASCADE,
+  title       VARCHAR(500),
+  created_at  TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id    UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  role          VARCHAR(10) NOT NULL CHECK (role IN ('user', 'assistant')),
+  content       TEXT NOT NULL,
+  citations     JSONB DEFAULT '[]',
+  answer_status VARCHAR(20) DEFAULT 'answered'
+                  CHECK (answer_status IN ('answered', 'not_found', 'error')),
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+
+-- =============================================================================
+-- V3: Employee Training Dashboard
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS module_completions (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      VARCHAR(255) NOT NULL,
+  module_id    UUID REFERENCES training_modules(id) ON DELETE CASCADE,
+  completed_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (user_id, module_id)
+);
+CREATE INDEX IF NOT EXISTS idx_completions_user ON module_completions(user_id);
