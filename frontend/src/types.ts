@@ -1,4 +1,4 @@
-/** V2 SSE event types — mirrors backend/src/types.ts */
+/** V2 SSE event types */
 export type SseEvent =
   | { type: 'stage'; message: string }
   | { type: 'gap_found'; regulation: string; score: number; severity: 'critical' | 'high' | 'medium'; roles: string[] }
@@ -20,3 +20,52 @@ export interface TrainingModule {
   version: number;
   created_at: string;
 }
+
+/** V3 types */
+export interface Document {
+  id: string;
+  display_name: string;
+  status: 'processing' | 'ready' | 'error';
+  file_size_bytes: number;
+  total_chunks: number;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface ChatCitation {
+  documentName: string;
+  sectionHeading: string | null;
+  sectionNumber: string | null;
+  pageNumber: number | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  citations: ChatCitation[];
+  answer_status: 'answered' | 'not_found' | 'error';
+  created_at: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string | null;
+  created_at: string;
+}
+
+export interface TrainingModuleWithProgress extends TrainingModule {
+  completed_at: string | null;
+}
+
+export interface TrainingProgress {
+  total: number;
+  completed: number;
+  byRegulation: Array<{ regulation: string; total: number; completed: number }>;
+}
+
+/** Chat SSE event */
+export type ChatSseEvent =
+  | { type: 'token'; token: string }
+  | { type: 'done'; answerStatus: 'answered' | 'not_found'; citations: ChatCitation[] }
+  | { type: 'error'; error: string };
