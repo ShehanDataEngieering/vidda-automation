@@ -59,6 +59,10 @@ const FALLBACK_CHUNKS: Array<{
 
 const REGULATION_NAMES = ['GDPR', 'AML', 'DORA', 'MIFID2'];
 
+function isAuthError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'statusCode' in err && (err as { statusCode: number }).statusCode === 401;
+}
+
 async function seedFromHtml(): Promise<Set<string>> {
   console.log('Fetching regulation text from legislation.gov.uk XML API...');
   const regulationMap = await fetchAllRegulations();
@@ -130,12 +134,17 @@ async function seedFallback(regulations: string[]): Promise<void> {
 }
 
 async function seed() {
-  // Primary: fetch from EUR-Lex HTML
+  // Primary: fetch from legislation.gov.uk XML API
   let seeded: Set<string>;
   try {
     seeded = await seedFromHtml();
   } catch (err) {
-    console.error('EUR-Lex fetch error, falling back entirely to hardcoded chunks:', err);
+    if (isAuthError(err)) {
+      console.error('\nVoyage AI authentication failed (401). Please update VOYAGE_API_KEY in .env');
+      console.error('Get your key at: https://dash.voyageai.com\n');
+      throw err;
+    }
+    console.error('Regulation fetch error, falling back entirely to hardcoded chunks:', String(err));
     seeded = new Set();
   }
 
