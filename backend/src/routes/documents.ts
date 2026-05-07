@@ -3,6 +3,7 @@ import multer from 'multer';
 import { requireSignedIn, requireRole } from '../middleware/requireAuth';
 import { getUserContext } from '../utils/getUser';
 import { chunkPdf } from '../services/pdfChunker';
+import { embedTexts } from '../services/embeddings';
 import { db as pool } from '../db/client';
 import { logger } from '../utils/logger';
 
@@ -53,37 +54,66 @@ documentsRouter.post(
     setImmediate(async () => {
       logger.info('PDF chunking started', { documentId, file: originalname });
       try {
-        const { chunks, crossRefs } = await chunkPdf(buffer);
-        logger.info('PDF chunked', { documentId, chunks: chunks.length, crossRefs: crossRefs.length });
+        const { parents, children, crossRefs } = await chunkPdf(buffer);
+        logger.info('PDF chunked', { documentId, parents: parents.length, children: children.length, crossRefs: crossRefs.length });
 
-        // Batch insert chunks
-        for (const chunk of chunks) {
-          await pool.query(
+        // Insert parent chunks first (no parent_chunk_id)
+        const parentIdByIndex = new Map<number, string>();
+        for (const chunk of parents) {
+          const { rows: pr } = await pool.query<{ id: string }>(
             `INSERT INTO document_chunks
-               (document_id, company_id, chunk_index, section_heading, section_number, page_number, content)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [
-              documentId,
-              user.companyId,
-              chunk.chunkIndex,
-              chunk.sectionHeading,
-              chunk.sectionNumber,
-              chunk.pageNumber,
-              chunk.content,
-            ],
+               (document_id, company_id, chunk_index, section_heading, section_number, page_number, content, chunk_type)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'parent')
+             RETURNING id`,
+            [documentId, user.companyId, chunk.chunkIndex, chunk.sectionHeading, chunk.sectionNumber, chunk.pageNumber, chunk.content],
           );
+          parentIdByIndex.set(chunk.chunkIndex, pr[0].id);
         }
 
-        // Build cross-reference relationships
-        if (crossRefs.length > 0) {
-          // Fetch all chunk IDs for this document (indexed by chunkIndex)
-          const { rows: chunkRows } = await pool.query<{ id: string; chunk_index: number }>(
-            `SELECT id, chunk_index FROM document_chunks WHERE document_id = $1`,
-            [documentId],
+        // Insert child chunks referencing their parent UUIDs
+        const childIdByIndex = new Map<number, string>();
+        for (const chunk of children) {
+          const parentUuid = parentIdByIndex.get(chunk.parentChunkIndex) ?? null;
+          const { rows: cr } = await pool.query<{ id: string }>(
+            `INSERT INTO document_chunks
+               (document_id, company_id, chunk_index, section_heading, section_number, page_number, content, chunk_type, parent_chunk_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'child', $8)
+             RETURNING id`,
+            [documentId, user.companyId, chunk.chunkIndex, chunk.sectionHeading, chunk.sectionNumber, chunk.pageNumber, chunk.content, parentUuid],
           );
-          const idByIndex = new Map(chunkRows.map(r => [r.chunk_index, r.id]));
+          childIdByIndex.set(chunk.chunkIndex, cr[0].id);
+        }
 
-          // Fetch target chunks by section_number within this document
+        // Generate embeddings for parents and children, then UPDATE
+        const allChunks = [...parents, ...children];
+        const allTexts = allChunks.map(c => c.content);
+        logger.info('Generating embeddings', { documentId, count: allTexts.length });
+        const embeddings = await embedTexts(allTexts);
+
+        for (let i = 0; i < parents.length; i++) {
+          const embedding = embeddings[i];
+          if (!embedding) continue;
+          const uuid = parentIdByIndex.get(parents[i].chunkIndex);
+          if (!uuid) continue;
+          await pool.query(
+            `UPDATE document_chunks SET embedding = $1::vector WHERE id = $2`,
+            [`[${embedding.join(',')}]`, uuid],
+          );
+        }
+        for (let i = 0; i < children.length; i++) {
+          const embedding = embeddings[parents.length + i];
+          if (!embedding) continue;
+          const uuid = childIdByIndex.get(children[i].chunkIndex);
+          if (!uuid) continue;
+          await pool.query(
+            `UPDATE document_chunks SET embedding = $1::vector WHERE id = $2`,
+            [`[${embedding.join(',')}]`, uuid],
+          );
+        }
+        logger.info('Embeddings generated', { documentId, embedded: embeddings.filter(Boolean).length });
+
+        // Build cross-reference relationships (source = parent chunks)
+        if (crossRefs.length > 0) {
           const { rows: sectionRows } = await pool.query<{ id: string; section_number: string }>(
             `SELECT id, section_number FROM document_chunks WHERE document_id = $1 AND section_number IS NOT NULL`,
             [documentId],
@@ -91,7 +121,7 @@ documentsRouter.post(
           const idBySection = new Map(sectionRows.map(r => [r.section_number.toLowerCase(), r.id]));
 
           for (const ref of crossRefs) {
-            const sourceId = idByIndex.get(ref.sourceChunkIndex);
+            const sourceId = parentIdByIndex.get(ref.sourceChunkIndex);
             const targetId = idBySection.get(ref.targetSectionNumber);
             if (sourceId && targetId) {
               await pool.query(
@@ -104,11 +134,12 @@ documentsRouter.post(
           }
         }
 
+        const totalChunks = parents.length + children.length;
         await pool.query(
           `UPDATE documents SET status = 'ready', total_chunks = $1 WHERE id = $2`,
-          [chunks.length, documentId],
+          [totalChunks, documentId],
         );
-        logger.info('Document ready', { documentId, totalChunks: chunks.length });
+        logger.info('Document ready', { documentId, parents: parents.length, children: children.length });
       } catch (err) {
         logger.error('PDF chunking failed', { documentId, error: String(err) });
         await pool.query(

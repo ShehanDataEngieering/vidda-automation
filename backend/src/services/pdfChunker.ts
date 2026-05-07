@@ -9,14 +9,32 @@ export interface RawChunk {
   content: string;
 }
 
+export interface ChildChunk {
+  chunkIndex: number;
+  parentChunkIndex: number;
+  sectionHeading: string | null;
+  sectionNumber: string | null;
+  pageNumber: number | null;
+  content: string;
+}
+
 export interface CrossRef {
   sourceChunkIndex: number;
   targetSectionNumber: string;
 }
 
-// ~4 chars per token approximation
-const MIN_CHARS = 1200; // ~300 tokens
-const MAX_CHARS = 3200; // ~800 tokens
+export interface ChunkPdfResult {
+  parents: RawChunk[];
+  children: ChildChunk[];
+  crossRefs: CrossRef[];
+}
+
+// Parent: section-level, up to 2000 chars
+// Child: paragraph-level within each parent, 400-800 chars
+const PARENT_MIN_CHARS = 800;
+const PARENT_MAX_CHARS = 2000;
+const CHILD_MIN_CHARS = 200;
+const CHILD_MAX_CHARS = 800;
 
 const HEADING_PATTERNS = [
   /^\s*(Article|Section|Annex|Schedule|Appendix|Chapter)\s+([\d.]+[a-z]?)\b/i,
@@ -24,7 +42,6 @@ const HEADING_PATTERNS = [
   /^\s*(\d+)\.\s+[A-Z][A-Za-z]{3,}/,
 ];
 
-// Patterns that look like cross-references inside body text
 const CROSS_REF_PATTERNS = [
   /\b(?:see|pursuant to|as defined in|referred to in|in accordance with)\s+(?:Article|Section|Annex)\s+([\d.]+[a-z]?)/gi,
   /\bArticle\s+([\d.]+[a-z]?)\b/g,
@@ -34,14 +51,8 @@ const CROSS_REF_PATTERNS = [
 function detectHeading(line: string): { heading: string; number: string } | null {
   for (const pattern of HEADING_PATTERNS) {
     const m = line.match(pattern);
-    if (m) {
-      return {
-        heading: line.trim(),
-        number: m[2] ?? m[1] ?? '',
-      };
-    }
+    if (m) return { heading: line.trim(), number: m[2] ?? m[1] ?? '' };
   }
-  // Short ALL-CAPS line (2-8 words)
   const trimmed = line.trim();
   if (/^[A-Z\s\-–:]{5,60}$/.test(trimmed) && trimmed.split(/\s+/).length <= 8) {
     return { heading: trimmed, number: '' };
@@ -49,14 +60,61 @@ function detectHeading(line: string): { heading: string; number: string } | null
   return null;
 }
 
-function splitOversized(text: string, heading: string | null, number: string | null, page: number | null, baseIndex: number): RawChunk[] {
+function splitIntoChildren(
+  parent: RawChunk,
+  baseChildIndex: number,
+): ChildChunk[] {
+  const paragraphs = parent.content.split(/\n\n+/).filter(p => p.trim().length > 0);
+  const children: ChildChunk[] = [];
+  let current = '';
+  let childIdx = baseChildIndex;
+
+  for (const para of paragraphs) {
+    const candidate = current ? current + '\n\n' + para : para;
+    if (candidate.length > CHILD_MAX_CHARS && current.length >= CHILD_MIN_CHARS) {
+      children.push({
+        chunkIndex: childIdx++,
+        parentChunkIndex: parent.chunkIndex,
+        sectionHeading: parent.sectionHeading,
+        sectionNumber: parent.sectionNumber,
+        pageNumber: parent.pageNumber,
+        content: current.trim(),
+      });
+      current = para;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.trim().length >= CHILD_MIN_CHARS) {
+    children.push({
+      chunkIndex: childIdx,
+      parentChunkIndex: parent.chunkIndex,
+      sectionHeading: parent.sectionHeading,
+      sectionNumber: parent.sectionNumber,
+      pageNumber: parent.pageNumber,
+      content: current.trim(),
+    });
+  } else if (current.trim() && children.length > 0) {
+    // Append to last child rather than drop
+    const last = children[children.length - 1];
+    if (last) last.content += '\n\n' + current.trim();
+  }
+  return children;
+}
+
+function splitOversizedParent(
+  text: string,
+  heading: string | null,
+  number: string | null,
+  page: number | null,
+  baseIndex: number,
+): RawChunk[] {
   const paragraphs = text.split(/\n\n+/);
   const chunks: RawChunk[] = [];
   let current = '';
   let partNum = 0;
-
   for (const para of paragraphs) {
-    if ((current + '\n\n' + para).length > MAX_CHARS && current.length > 0) {
+    if ((current + '\n\n' + para).length > PARENT_MAX_CHARS && current.length > 0) {
       chunks.push({
         chunkIndex: baseIndex + partNum,
         sectionHeading: partNum === 0 ? heading : heading ? `${heading} (continued)` : null,
@@ -82,54 +140,37 @@ function splitOversized(text: string, heading: string | null, number: string | n
   return chunks;
 }
 
-export async function chunkPdf(pdfBuffer: Buffer): Promise<{ chunks: RawChunk[]; crossRefs: CrossRef[] }> {
+export async function chunkPdf(pdfBuffer: Buffer): Promise<ChunkPdfResult> {
   const parsed = await pdfParse(pdfBuffer);
   const pages = parsed.text.split('\f');
 
-  // Pass 1 & 2: collect lines with their page numbers, detect headings, build sections
-  type Section = {
-    heading: string | null;
-    number: string | null;
-    page: number | null;
-    lines: string[];
-  };
-
+  type Section = { heading: string | null; number: string | null; page: number | null; lines: string[] };
   const sections: Section[] = [];
   let currentSection: Section = { heading: null, number: null, page: null, lines: [] };
 
   pages.forEach((pageText: string, pageIdx: number) => {
-    const lines = pageText.split('\n');
-    for (const line of lines) {
+    for (const line of pageText.split('\n')) {
       const h = detectHeading(line);
       if (h) {
-        if (currentSection.lines.join('\n').trim().length > 0) {
-          sections.push(currentSection);
-        }
-        currentSection = {
-          heading: h.heading,
-          number: h.number || null,
-          page: pageIdx + 1,
-          lines: [],
-        };
+        if (currentSection.lines.join('\n').trim().length > 0) sections.push(currentSection);
+        currentSection = { heading: h.heading, number: h.number || null, page: pageIdx + 1, lines: [] };
       } else {
         currentSection.lines.push(line);
       }
     }
   });
-  if (currentSection.lines.join('\n').trim().length > 0) {
-    sections.push(currentSection);
-  }
+  if (currentSection.lines.join('\n').trim().length > 0) sections.push(currentSection);
 
-  // Pass 3: normalize chunk sizes
-  const rawChunks: RawChunk[] = [];
-  let chunkIndex = 0;
+  // Build parent chunks (section-level, up to PARENT_MAX_CHARS)
+  const parents: RawChunk[] = [];
+  let parentIndex = 0;
   let pendingMerge: Section | null = null;
 
   for (const section of sections) {
     const text = section.lines.join('\n').trim();
     if (!text) continue;
 
-    const sectionToProcess: { heading: string | null; number: string | null; page: number | null; content: string } = pendingMerge
+    const toProcess: { heading: string | null; number: string | null; page: number | null; content: string } = pendingMerge
       ? {
           heading: pendingMerge.heading,
           number: pendingMerge.number,
@@ -140,83 +181,55 @@ export async function chunkPdf(pdfBuffer: Buffer): Promise<{ chunks: RawChunk[];
 
     pendingMerge = null;
 
-    if (sectionToProcess.content.length < MIN_CHARS) {
-      // Too small — defer merge with next section
-      pendingMerge = {
-        heading: sectionToProcess.heading,
-        number: sectionToProcess.number,
-        page: sectionToProcess.page,
-        lines: [sectionToProcess.content],
-      };
+    if (toProcess.content.length < PARENT_MIN_CHARS) {
+      pendingMerge = { heading: toProcess.heading, number: toProcess.number, page: toProcess.page, lines: [toProcess.content] };
       continue;
     }
 
-    if (sectionToProcess.content.length > MAX_CHARS) {
-      const sub = splitOversized(
-        sectionToProcess.content,
-        sectionToProcess.heading,
-        sectionToProcess.number,
-        sectionToProcess.page,
-        chunkIndex,
-      );
-      for (const s of sub) {
-        s.chunkIndex = chunkIndex++;
-        rawChunks.push(s);
-      }
+    if (toProcess.content.length > PARENT_MAX_CHARS) {
+      const sub = splitOversizedParent(toProcess.content, toProcess.heading, toProcess.number, toProcess.page, parentIndex);
+      for (const s of sub) { s.chunkIndex = parentIndex++; parents.push(s); }
     } else {
-      rawChunks.push({
-        chunkIndex: chunkIndex++,
-        sectionHeading: sectionToProcess.heading,
-        sectionNumber: sectionToProcess.number,
-        pageNumber: sectionToProcess.page,
-        content: sectionToProcess.content,
-      });
+      parents.push({ chunkIndex: parentIndex++, sectionHeading: toProcess.heading, sectionNumber: toProcess.number, pageNumber: toProcess.page, content: toProcess.content });
     }
   }
-
-  // Flush pending merge
   if (pendingMerge) {
     const content = pendingMerge.lines.join('\n').trim();
-    if (content) {
-      rawChunks.push({
-        chunkIndex: chunkIndex++,
-        sectionHeading: pendingMerge.heading,
-        sectionNumber: pendingMerge.number,
-        pageNumber: pendingMerge.page,
-        content,
-      });
-    }
+    if (content) parents.push({ chunkIndex: parentIndex++, sectionHeading: pendingMerge.heading, sectionNumber: pendingMerge.number, pageNumber: pendingMerge.page, content });
   }
 
-  // Cross-reference detection
-  const sectionNumberToChunkIndex = new Map<string, number>();
-  for (const chunk of rawChunks) {
-    if (chunk.sectionNumber) {
-      sectionNumberToChunkIndex.set(chunk.sectionNumber.toLowerCase(), chunk.chunkIndex);
-    }
+  // Build child chunks (paragraph-level within each parent)
+  const children: ChildChunk[] = [];
+  let childBase = 0;
+  for (const parent of parents) {
+    const kids = splitIntoChildren(parent, childBase);
+    children.push(...kids);
+    childBase += kids.length + 1;
+  }
+
+  // Cross-reference detection (on parents for stability)
+  const sectionNumberToParentIndex = new Map<string, number>();
+  for (const p of parents) {
+    if (p.sectionNumber) sectionNumberToParentIndex.set(p.sectionNumber.toLowerCase(), p.chunkIndex);
   }
 
   const crossRefs: CrossRef[] = [];
   const seen = new Set<string>();
-
-  for (const chunk of rawChunks) {
+  for (const chunk of parents) {
     for (const pattern of CROSS_REF_PATTERNS) {
       pattern.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = pattern.exec(chunk.content)) !== null) {
         const targetNum = m[1]?.toLowerCase();
         if (!targetNum) continue;
-        const targetChunkIdx = sectionNumberToChunkIndex.get(targetNum);
-        if (targetChunkIdx !== undefined && targetChunkIdx !== chunk.chunkIndex) {
-          const key = `${chunk.chunkIndex}:${targetChunkIdx}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            crossRefs.push({ sourceChunkIndex: chunk.chunkIndex, targetSectionNumber: targetNum });
-          }
+        const targetIdx = sectionNumberToParentIndex.get(targetNum);
+        if (targetIdx !== undefined && targetIdx !== chunk.chunkIndex) {
+          const key = `${chunk.chunkIndex}:${targetIdx}`;
+          if (!seen.has(key)) { seen.add(key); crossRefs.push({ sourceChunkIndex: chunk.chunkIndex, targetSectionNumber: targetNum }); }
         }
       }
     }
   }
 
-  return { chunks: rawChunks, crossRefs };
+  return { parents, children, crossRefs };
 }

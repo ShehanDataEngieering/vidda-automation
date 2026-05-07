@@ -1,4 +1,7 @@
 import { db as pool } from '../db/client';
+import { embedText } from './embeddings';
+import { rerankResults } from './reranker';
+import { logger } from '../utils/logger';
 
 export interface DocSearchResult {
   id: string;
@@ -13,11 +16,33 @@ export interface DocSearchResult {
   isLinked: boolean;
 }
 
-/**
- * Two-stage retrieval:
- * 1. BM25+FTS top-5 direct matches scoped to company's document_chunks
- * 2. Follow chunk_relationships edges (1 hop) to pull in referenced chunks
- */
+interface DbChunkRow {
+  id: string;
+  document_id: string;
+  display_name: string;
+  section_heading: string | null;
+  section_number: string | null;
+  page_number: number | null;
+  content: string;
+  parent_chunk_id: string | null;
+  bm25: string;
+}
+
+function toResult(row: DbChunkRow, finalScore: number, isLinked: boolean): DocSearchResult {
+  return {
+    id: row.id,
+    documentId: row.document_id,
+    documentName: row.display_name,
+    sectionHeading: row.section_heading,
+    sectionNumber: row.section_number,
+    pageNumber: row.page_number,
+    content: row.content,
+    bm25Score: Number(row.bm25) || 0,
+    finalScore,
+    isLinked,
+  };
+}
+
 export async function searchDocumentChunks(
   query: string,
   companyId: string,
@@ -26,52 +51,63 @@ export async function searchDocumentChunks(
   const sanitised = query.replace(/[^\w\s]/g, ' ').trim();
   const tsQuery = sanitised.split(/\s+/).filter(Boolean).join(' & ');
 
-  let directRows: Array<{
-    id: string;
-    document_id: string;
-    display_name: string;
-    section_heading: string | null;
-    section_number: string | null;
-    page_number: number | null;
-    content: string;
-    bm25: number;
-  }> = [];
+  // ── BM25 on child chunks ──────────────────────────────────────────────────
+  const bm25Rank = new Map<string, number>();
+  let bm25Rows: DbChunkRow[] = [];
 
   if (tsQuery) {
-    const { rows } = await pool.query(
-      `SELECT
-         dc.id,
-         dc.document_id,
-         d.display_name,
-         dc.section_heading,
-         dc.section_number,
-         dc.page_number,
-         dc.content,
-         ts_rank_cd(to_tsvector('english', dc.content), to_tsquery('english', $1)) AS bm25
+    const { rows } = await pool.query<DbChunkRow>(
+      `SELECT dc.id, dc.document_id, d.display_name, dc.section_heading,
+              dc.section_number, dc.page_number, dc.content, dc.parent_chunk_id,
+              ts_rank_cd(to_tsvector('english', dc.content), to_tsquery('english', $1)) AS bm25
        FROM document_chunks dc
        JOIN documents d ON d.id = dc.document_id
        WHERE dc.company_id = $2
          AND d.status = 'ready'
+         AND COALESCE(dc.chunk_type, 'child') = 'child'
          AND to_tsvector('english', dc.content) @@ to_tsquery('english', $1)
        ORDER BY bm25 DESC
-       LIMIT $3`,
-      [tsQuery, companyId, topK],
+       LIMIT 15`,
+      [tsQuery, companyId],
     );
-    directRows = rows;
+    bm25Rows = rows;
+    rows.forEach((r, i) => bm25Rank.set(r.id, i + 1));
   }
 
-  // Fallback: return most recent chunks if FTS returned nothing
-  if (directRows.length === 0) {
-    const { rows } = await pool.query(
-      `SELECT
-         dc.id,
-         dc.document_id,
-         d.display_name,
-         dc.section_heading,
-         dc.section_number,
-         dc.page_number,
-         dc.content,
-         0 AS bm25
+  // ── Vector on child chunks ────────────────────────────────────────────────
+  const vectorRank = new Map<string, number>();
+  try {
+    const queryVec = await embedText(query);
+    const vecStr = `[${queryVec.join(',')}]`;
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT dc.id
+       FROM document_chunks dc
+       JOIN documents d ON d.id = dc.document_id
+       WHERE dc.company_id = $1
+         AND d.status = 'ready'
+         AND COALESCE(dc.chunk_type, 'child') = 'child'
+         AND dc.embedding IS NOT NULL
+       ORDER BY dc.embedding <=> $2::vector
+       LIMIT 15`,
+      [companyId, vecStr],
+    );
+    rows.forEach((r, i) => vectorRank.set(r.id, i + 1));
+  } catch (err) {
+    logger.warn('Document vector search skipped', { error: String(err) });
+  }
+
+  const bm25Hits = bm25Rank.size;
+  const vectorHits = vectorRank.size;
+
+  // ── RRF fusion ─────────────────────────────────────────────────────────────
+  const allIds = new Set([...bm25Rank.keys(), ...vectorRank.keys()]);
+
+  // Fallback: no matches at all
+  if (allIds.size === 0) {
+    const { rows } = await pool.query<DbChunkRow>(
+      `SELECT dc.id, dc.document_id, d.display_name, dc.section_heading,
+              dc.section_number, dc.page_number, dc.content, dc.parent_chunk_id,
+              0 AS bm25
        FROM document_chunks dc
        JOIN documents d ON d.id = dc.document_id
        WHERE dc.company_id = $1 AND d.status = 'ready'
@@ -79,69 +115,74 @@ export async function searchDocumentChunks(
        LIMIT $2`,
       [companyId, topK],
     );
-    directRows = rows;
+    return rows.map(r => toResult(r, 0.1, false));
   }
 
-  const directIds = new Set(directRows.map(r => r.id));
-  const results: DocSearchResult[] = directRows.map(r => ({
-    id: r.id,
-    documentId: r.document_id,
-    documentName: r.display_name,
-    sectionHeading: r.section_heading,
-    sectionNumber: r.section_number,
-    pageNumber: r.page_number,
-    content: r.content,
-    bm25Score: Number(r.bm25),
-    finalScore: Number(r.bm25),
-    isLinked: false,
-  }));
+  const rrfScores = Array.from(allIds).map(id => ({
+    id,
+    rrf: 1 / (60 + (bm25Rank.get(id) ?? 9999)) + 1 / (60 + (vectorRank.get(id) ?? 9999)),
+  })).sort((a, b) => b.rrf - a.rrf);
 
-  // 1-hop expansion via chunk_relationships
-  if (directIds.size > 0) {
-    const idList = Array.from(directIds);
-    const { rows: linkedRows } = await pool.query(
-      `SELECT
-         dc.id,
-         dc.document_id,
-         d.display_name,
-         dc.section_heading,
-         dc.section_number,
-         dc.page_number,
-         dc.content
-       FROM chunk_relationships cr
-       JOIN document_chunks dc ON dc.id = cr.target_chunk_id
+  const top15Ids = rrfScores.slice(0, 15).map(x => x.id);
+
+  // Fetch full child rows
+  const bm25RowMap = new Map(bm25Rows.map(r => [r.id, r]));
+  const missingIds = top15Ids.filter(id => !bm25RowMap.has(id));
+
+  if (missingIds.length > 0) {
+    const { rows } = await pool.query<DbChunkRow>(
+      `SELECT dc.id, dc.document_id, d.display_name, dc.section_heading,
+              dc.section_number, dc.page_number, dc.content, dc.parent_chunk_id,
+              0 AS bm25
+       FROM document_chunks dc
        JOIN documents d ON d.id = dc.document_id
-       WHERE cr.source_chunk_id = ANY($1::uuid[])
-         AND dc.company_id = $2
-         AND d.status = 'ready'`,
-      [idList, companyId],
+       WHERE dc.id = ANY($1)`,
+      [missingIds],
     );
+    rows.forEach(r => bm25RowMap.set(r.id, r));
+  }
 
-    for (const row of linkedRows) {
-      if (!directIds.has(row.id)) {
-        directIds.add(row.id);
-        results.push({
-          id: row.id,
-          documentId: row.document_id,
-          documentName: row.display_name,
-          sectionHeading: row.section_heading,
-          sectionNumber: row.section_number,
-          pageNumber: row.page_number,
-          content: row.content,
-          bm25Score: 0,
-          finalScore: 0,
-          isLinked: true,
-        });
+  const childRows = top15Ids.map(id => bm25RowMap.get(id)).filter((r): r is DbChunkRow => !!r);
+
+  // ── Parent expansion ──────────────────────────────────────────────────────
+  const parentIds = [...new Set(childRows.map(r => r.parent_chunk_id).filter((id): id is string => !!id))];
+  const parentRowMap = new Map<string, DbChunkRow>();
+
+  if (parentIds.length > 0) {
+    const { rows } = await pool.query<DbChunkRow>(
+      `SELECT dc.id, dc.document_id, d.display_name, dc.section_heading,
+              dc.section_number, dc.page_number, dc.content, dc.parent_chunk_id,
+              0 AS bm25
+       FROM document_chunks dc
+       JOIN documents d ON d.id = dc.document_id
+       WHERE dc.id = ANY($1)`,
+      [parentIds],
+    );
+    rows.forEach(r => parentRowMap.set(r.id, r));
+  }
+
+  // Build combined set: parents first (richer context), then orphan children
+  const combined: DbChunkRow[] = [];
+  const addedIds = new Set<string>();
+
+  for (const child of childRows) {
+    const parentId = child.parent_chunk_id;
+    if (parentId) {
+      const parent = parentRowMap.get(parentId);
+      if (parent && !addedIds.has(parent.id)) {
+        combined.push(parent);
+        addedIds.add(parent.id);
       }
+    } else if (!addedIds.has(child.id)) {
+      combined.push(child);
+      addedIds.add(child.id);
     }
   }
 
-  // JS rerank: linked chunks get a small boost over pure fallback, but below direct hits
-  results.sort((a, b) => {
-    const scoreA = a.bm25Score + (a.isLinked ? 0.1 : 0);
-    const scoreB = b.bm25Score + (b.isLinked ? 0.1 : 0);
-    return scoreB - scoreA;
-  });
+  // ── Voyage reranking ──────────────────────────────────────────────────────
+  const reranked = await rerankResults(query, combined, Math.min(topK + 3, combined.length));
 
-  return results.slice(0, topK + 3); // allow a few linked extras
+  logger.debug('documentSearch done', { query: query.slice(0, 60), bm25Hits, vectorHits, rrfCandidates: allIds.size, parents: parentIds.length, reranked: reranked.length });
+
+  return reranked.map((r, i) => toResult(r, 1 - i * 0.05, parentRowMap.has(r.id))).slice(0, topK + 3);
 }
