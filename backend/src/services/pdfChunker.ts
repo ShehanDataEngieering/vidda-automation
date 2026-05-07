@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
+const { PDFParse } = require('pdf-parse') as { PDFParse: new (opts: { data: Buffer }) => { getText(): Promise<{ text: string; pages: Array<{ text: string }> }> } };
 
 export interface RawChunk {
   chunkIndex: number;
@@ -141,8 +141,9 @@ function splitOversizedParent(
 }
 
 export async function chunkPdf(pdfBuffer: Buffer): Promise<ChunkPdfResult> {
-  const parsed = await pdfParse(pdfBuffer);
-  const pages = parsed.text.split('\f');
+  const parser = new PDFParse({ data: pdfBuffer });
+  const result = await parser.getText();
+  const pages = result.pages.length > 0 ? result.pages.map(p => p.text) : result.text.split('\f');
 
   type Section = { heading: string | null; number: string | null; page: number | null; lines: string[] };
   const sections: Section[] = [];

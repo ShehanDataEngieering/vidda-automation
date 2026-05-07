@@ -71,11 +71,12 @@ const SEED_CHUNKS = [
 
 async function seedFromPdfs(pdfDir: string): Promise<boolean> {
   const files = fs.readdirSync(pdfDir).filter(f => f.endsWith('.pdf'));
-  if (files.length === 0) return false;
+  const nonEmptyFiles = files.filter(f => fs.statSync(path.join(pdfDir, f)).size > 0);
+  if (nonEmptyFiles.length === 0) return false;
 
-  console.log(`Found ${files.length} PDF(s) in ${pdfDir} — processing with parent-child chunking...`);
+  console.log(`Found ${nonEmptyFiles.length} PDF(s) in ${pdfDir} — processing with parent-child chunking...`);
 
-  for (const file of files) {
+  for (const file of nonEmptyFiles) {
     const regulation = PDF_REGULATION_MAP[file.toLowerCase()];
     if (!regulation) {
       console.log(`  Skipping ${file} — no regulation mapping (add to PDF_REGULATION_MAP)`);

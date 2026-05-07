@@ -12,7 +12,7 @@ download() {
   local name="$1"
   local url="$2"
   local out="$DEST/$name"
-  if [ -f "$out" ]; then
+  if [ -f "$out" ] && [ -s "$out" ]; then
     echo "  [skip] $name already exists"
   else
     echo "  [download] $name"
