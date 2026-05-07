@@ -6,10 +6,12 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed": "ts-node src/db/seed.ts"
+    "seed": "ts-node src/db/seed.ts",
+    "download-pdfs": "ts-node scripts/download-pdfs-browserbase.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
+    "@browserbasehq/sdk": "^2.10.0",
     "@clerk/express": "^2.1.13",
     "@types/morgan": "^1.9.10",
     "cors": "^2.8.5",
@@ -19,6 +21,7 @@
     "multer": "^2.1.1",
     "pdf-parse": "^2.4.5",
     "pg": "^8.13.0",
+    "playwright-core": "^1.59.1",
     "voyageai": "^0.2.1",
     "zod": "^3.23.8"
   },
