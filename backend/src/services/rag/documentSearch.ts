@@ -1,7 +1,7 @@
-import { db as pool } from '../db/client';
+import { db as pool } from '../../db/client';
 import { embedText } from './embeddings';
 import { rerankResults } from './reranker';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 export interface DocSearchResult {
   id: string;

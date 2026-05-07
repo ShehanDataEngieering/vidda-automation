@@ -1,5 +1,5 @@
 import { VoyageAIClient } from 'voyageai';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 const client = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY ?? '' });
 const MODEL = 'voyage-finance-2';

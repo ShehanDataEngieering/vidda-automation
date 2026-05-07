@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../db/client';
 import { analyzeGaps } from '../services/gapAnalysis';
-import { searchChunks } from '../services/vectorSearch';
-import { streamModule } from '../services/generation';
+import { searchChunks } from '../services/rag/vectorSearch';
+import { streamModule } from '../services/llm/generation';
 import { scoreModule } from '../services/qualityScore';
 import type { SseEvent } from '../types';
 

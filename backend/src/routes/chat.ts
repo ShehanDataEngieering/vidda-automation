@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { requireSignedIn, requireRole } from '../middleware/requireAuth';
-import { getUserContext } from '../utils/getUser';
-import { searchDocumentChunks } from '../services/documentSearch';
-import { streamChatAnswer, buildCitations, detectAnswerStatus } from '../services/chatGeneration';
+import { requireSignedIn, requireRole } from '../middleware/auth';
+import { getUserContext } from '../utils/user';
+import { searchDocumentChunks } from '../services/rag/documentSearch';
+import { streamChatAnswer, buildCitations, detectAnswerStatus } from '../services/llm/chatGeneration';
 import { db as pool } from '../db/client';
 import { logger } from '../utils/logger';
 

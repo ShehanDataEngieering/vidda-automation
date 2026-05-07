@@ -1,8 +1,8 @@
-import { db } from '../db/client';
-import type { SearchResult } from '../types';
+import { db } from '../../db/client';
+import type { SearchResult } from '../../types';
 import { embedText } from './embeddings';
 import { rerankResults } from './reranker';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 interface DbChunkRow {
   id: string;

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { requireSignedIn, requireRole } from '../middleware/requireAuth';
-import { getUserContext } from '../utils/getUser';
+import { requireSignedIn, requireRole } from '../middleware/auth';
+import { getUserContext } from '../utils/user';
 import { db as pool } from '../db/client';
 
 export const trainingRouter = Router();

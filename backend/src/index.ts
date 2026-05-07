@@ -2,14 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { clerkMiddleware } from './middleware/requireAuth';
+import { clerkMiddleware } from './middleware/auth';
 import { companyRouter } from './routes/company';
 import { generateRouter } from './routes/generate';
 import { modulesRouter } from './routes/modules';
 import { authRouter } from './routes/auth';
 import { documentsRouter } from './routes/documents';
 import { chatRouter } from './routes/chat';
-import { trainingRouter } from './routes/trainingDashboard';
+import { trainingRouter } from './routes/training';
 import { logger } from './utils/logger';
 
 dotenv.config();

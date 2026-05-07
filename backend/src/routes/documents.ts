@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { requireSignedIn, requireRole } from '../middleware/requireAuth';
-import { getUserContext } from '../utils/getUser';
-import { chunkPdf } from '../services/pdfChunker';
-import { embedTexts } from '../services/embeddings';
+import { requireSignedIn, requireRole } from '../middleware/auth';
+import { getUserContext } from '../utils/user';
+import { chunkPdf } from '../services/pdf/chunker';
+import { embedTexts } from '../services/rag/embeddings';
 import { db as pool } from '../db/client';
 import { logger } from '../utils/logger';
 

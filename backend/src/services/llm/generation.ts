@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { filterPII } from './piiFilter';
-import type { SearchResult } from '../types';
+import { filterPII } from '../piiFilter';
+import type { SearchResult } from '../../types';
 
 const anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
 

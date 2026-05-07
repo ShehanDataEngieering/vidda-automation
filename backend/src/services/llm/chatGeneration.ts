@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { filterPII } from './piiFilter';
-import type { DocSearchResult } from './documentSearch';
+import { filterPII } from '../piiFilter';
+import type { DocSearchResult } from '../rag/documentSearch';
 
 export interface ChatCitation {
   documentName: string;

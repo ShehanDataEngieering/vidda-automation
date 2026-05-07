@@ -2,8 +2,8 @@ import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { chunkPdf } from '../services/pdfChunker';
-import { embedTexts } from '../services/embeddings';
+import { chunkPdf } from '../services/pdf/chunker';
+import { embedTexts } from '../services/rag/embeddings';
 
 dotenv.config();
 

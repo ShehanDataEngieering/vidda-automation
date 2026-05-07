@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { clerkClient, getAuth } from '@clerk/express';
 import { z } from 'zod';
-import { requireSignedIn } from '../middleware/requireAuth';
-import { getUserContext } from '../utils/getUser';
+import { requireSignedIn } from '../middleware/auth';
+import { getUserContext } from '../utils/user';
 
 export const authRouter = Router();
 
