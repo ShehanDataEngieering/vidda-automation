@@ -4,7 +4,7 @@ import { useApi } from '../utils/api';
 import type { TrainingModuleWithProgress, TrainingProgress } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 
 export default function TrainingDashboard() {
@@ -150,4 +150,3 @@ export default function TrainingDashboard() {
   );
 }
 
-void CardDescription;

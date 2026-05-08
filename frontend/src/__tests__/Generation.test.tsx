@@ -19,7 +19,7 @@ function makeStream(events: object[]): Response {
 describe('Generation', () => {
   it('renders all four pipeline stage labels', async () => {
     global.fetch = jest.fn().mockResolvedValue(makeStream([{ type: 'done' }])) as jest.Mock;
-    await act(async () => { render(<Generation companyId="abc" />); });
+    await act(async () => { render(<Generation companyId="abc" onComplete={() => undefined} />); });
     for (const label of ['Gap analysis', 'Vector search', 'Generating', 'Scoring']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
@@ -32,7 +32,7 @@ describe('Generation', () => {
         { type: 'done' },
       ])
     ) as jest.Mock;
-    await act(async () => { render(<Generation companyId="abc" />); });
+    await act(async () => { render(<Generation companyId="abc" onComplete={() => undefined} />); });
     expect(screen.getByText('GDPR')).toBeInTheDocument();
     expect(screen.getByText('All roles')).toBeInTheDocument();
   });
@@ -46,7 +46,7 @@ describe('Generation', () => {
         { type: 'done' },
       ])
     ) as jest.Mock;
-    await act(async () => { render(<Generation companyId="abc" />); });
+    await act(async () => { render(<Generation companyId="abc" onComplete={() => undefined} />); });
     expect(screen.getByText(/Hello world/)).toBeInTheDocument();
   });
 
@@ -58,7 +58,7 @@ describe('Generation', () => {
         { type: 'done' },
       ])
     ) as jest.Mock;
-    await act(async () => { render(<Generation companyId="abc" />); });
+    await act(async () => { render(<Generation companyId="abc" onComplete={() => undefined} />); });
     expect(screen.getByText(/Quality 80\/100/)).toBeInTheDocument();
   });
 
@@ -66,7 +66,7 @@ describe('Generation', () => {
     global.fetch = jest.fn().mockResolvedValue(
       makeStream([{ type: 'error', message: 'Generation pipeline failed' }])
     ) as jest.Mock;
-    await act(async () => { render(<Generation companyId="abc" />); });
+    await act(async () => { render(<Generation companyId="abc" onComplete={() => undefined} />); });
     expect(screen.getByText(/Generation pipeline failed/)).toBeInTheDocument();
   });
 });

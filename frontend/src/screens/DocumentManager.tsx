@@ -4,7 +4,7 @@ import { useApi, useUploadApi } from '../utils/api';
 import type { Document } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 function formatBytes(n: number) {
   if (n < 1024) return `${n} B`;
@@ -19,6 +19,7 @@ export default function DocumentManager() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
@@ -88,14 +89,21 @@ export default function DocumentManager() {
       </div>
 
       {/* Upload area */}
-      <Card className="mb-6 border-dashed">
-        <CardContent className="pt-6 pb-6 flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-            <Upload className="h-5 w-5 text-muted-foreground" />
+      <div
+        className={`mb-6 rounded-lg border-2 border-dashed transition-colors ${
+          dragging ? 'border-primary bg-primary/5' : 'border-border'
+        }`}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) void handleUpload(f); }}
+      >
+        <div className="py-8 flex flex-col items-center gap-3">
+          <div className={`h-10 w-10 rounded-full flex items-center justify-center transition-colors ${dragging ? 'bg-primary/10' : 'bg-muted'}`}>
+            <Upload className={`h-5 w-5 transition-colors ${dragging ? 'text-primary' : 'text-muted-foreground'}`} />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium">Upload a PDF document</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Max 20 MB · PDF only</p>
+            <p className="text-sm font-medium">{dragging ? 'Drop your PDF here' : 'Upload a PDF document'}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Drag & drop or click to browse · Max 20 MB · PDF only</p>
           </div>
           <input ref={fileRef} type="file" accept=".pdf" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) void handleUpload(f); e.target.value = ''; }} />
@@ -107,8 +115,8 @@ export default function DocumentManager() {
               <AlertCircle className="h-3.5 w-3.5" />{error}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Document list */}
       {docs.length === 0 ? (
@@ -116,8 +124,7 @@ export default function DocumentManager() {
       ) : (
         <div className="space-y-2">
           <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="text-sm">Uploaded Documents</CardTitle>
-            <CardDescription>{docs.length} document{docs.length !== 1 ? 's' : ''}</CardDescription>
+            <CardTitle className="text-sm">Uploaded Documents <span className="font-normal text-muted-foreground">({docs.length})</span></CardTitle>
           </CardHeader>
           {docs.map(doc => (
             <Card key={doc.id}>

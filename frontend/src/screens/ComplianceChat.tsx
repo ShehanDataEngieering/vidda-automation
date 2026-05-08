@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -140,7 +139,7 @@ export default function ComplianceChat() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-[calc(100vh)] bg-background">
       {/* Session sidebar */}
       <aside className="w-56 border-r border-border flex flex-col bg-sidebar">
         <div className="px-3 py-3 flex items-center justify-between border-b border-sidebar-border">
@@ -231,4 +230,3 @@ export default function ComplianceChat() {
   );
 }
 
-void Separator;
