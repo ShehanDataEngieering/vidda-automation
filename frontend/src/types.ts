@@ -64,6 +64,27 @@ export interface TrainingProgress {
   byRegulation: Array<{ regulation: string; total: number; completed: number }>;
 }
 
+/** User management types */
+export interface CompanyUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  imageUrl: string;
+  role: 'admin' | 'employee';
+  employeeRole: string | null;
+  lastSignInAt: string | null;
+  createdAt: string;
+}
+
+export interface PendingInvitation {
+  id: string;
+  email: string;
+  role: 'admin' | 'employee';
+  employeeRole: string | null;
+  createdAt: number;
+}
+
 /** Chat SSE event */
 export type ChatSseEvent =
   | { type: 'token'; token: string }

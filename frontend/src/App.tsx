@@ -10,8 +10,9 @@ import FinalOutput from './screens/FinalOutput';
 import DocumentManager from './screens/DocumentManager';
 import ComplianceChat from './screens/ComplianceChat';
 import TrainingDashboard from './screens/TrainingDashboard';
+import UserManagement from './screens/UserManagement';
 
-type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents';
+type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
 type EmployeeScreen = 'chat' | 'training';
 type Screen = AdminScreen | EmployeeScreen;
 
@@ -41,6 +42,7 @@ function AuthedApp() {
           <FinalOutput companyId={companyId} />
         )}
         {role === 'admin' && screen === 'documents' && <DocumentManager />}
+        {role === 'admin' && screen === 'users' && <UserManagement />}
 
         {role === 'employee' && screen === 'chat' && <ComplianceChat />}
         {role === 'employee' && screen === 'training' && <TrainingDashboard />}

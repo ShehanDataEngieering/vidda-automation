@@ -1,13 +1,13 @@
 import { UserButton } from '@clerk/react';
 import {
   Building2, FileText, Shield, CheckSquare, Upload,
-  MessageSquare, BookOpen, ChevronRight, type LucideIcon
+  MessageSquare, BookOpen, ChevronRight, Users, type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Separator } from '@/components/ui/separator';
 
-type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents';
+type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
 type EmployeeScreen = 'chat' | 'training';
 type Screen = AdminScreen | EmployeeScreen;
 
@@ -23,6 +23,7 @@ const adminNav: { id: AdminScreen; label: string; icon: LucideIcon }[] = [
   { id: 'review', label: 'Review', icon: CheckSquare },
   { id: 'output', label: 'Final Output', icon: Shield },
   { id: 'documents', label: 'Documents', icon: Upload },
+  { id: 'users', label: 'Team', icon: Users },
 ];
 
 const employeeNav: { id: EmployeeScreen; label: string; icon: LucideIcon }[] = [
