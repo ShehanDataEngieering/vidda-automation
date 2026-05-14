@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BookOpen, CheckCircle2 } from 'lucide-react';
+import { BookOpen, CheckCircle2, PlayCircle } from 'lucide-react';
 import { useApi } from '../utils/api';
 import type { TrainingModuleWithProgress, TrainingProgress } from '../types';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 
-export default function TrainingDashboard() {
+interface Props {
+  onStartCourse?: (module: TrainingModuleWithProgress) => void;
+}
+
+export default function TrainingDashboard({ onStartCourse }: Props) {
   const apiFetch = useApi();
   const [modules, setModules] = useState<TrainingModuleWithProgress[]>([]);
   const [progress, setProgress] = useState<TrainingProgress | null>(null);
-  const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
 
   useEffect(() => {
@@ -21,17 +24,6 @@ export default function TrainingDashboard() {
         if (progRes.ok) setProgress(await progRes.json() as TrainingProgress);
       });
   }, []);
-
-  async function markComplete(id: string) {
-    setCompleting(prev => new Set(prev).add(id));
-    const res = await apiFetch(`/api/training/my-modules/${id}/complete`, { method: 'POST' });
-    if (res.ok) {
-      const { completed_at } = await res.json() as { completed_at: string };
-      setModules(prev => prev.map(m => m.id === id ? { ...m, completed_at } : m));
-      setProgress(prev => prev ? { ...prev, completed: prev.completed + 1 } : prev);
-    }
-    setCompleting(prev => { const s = new Set(prev); s.delete(id); return s; });
-  }
 
   const filtered = modules.filter(m =>
     filter === 'all' ? true : filter === 'done' ? !!m.completed_at : !m.completed_at
@@ -118,27 +110,39 @@ export default function TrainingDashboard() {
                   <CheckCircle2 className={`h-4 w-4 ${m.completed_at ? 'text-green-600' : 'text-muted-foreground/30'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium">{m.regulation}</p>
                     <Badge variant="outline" className="text-xs">{m.role}</Badge>
                     {m.quality_score != null && (
                       <Badge variant={m.quality_score >= 70 ? 'success' : 'warning'} className="text-xs">{m.quality_score}%</Badge>
                     )}
                   </div>
+                  {m.rationale && (
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{m.rationale}</p>
+                  )}
                   {m.completed_at ? (
                     <p className="text-xs text-green-600 mt-0.5">Completed {new Date(m.completed_at).toLocaleDateString()}</p>
                   ) : (
-                    <p className="text-xs text-muted-foreground mt-0.5">Not started</p>
+                    !m.rationale && <p className="text-xs text-muted-foreground mt-0.5">Not started</p>
                   )}
                 </div>
-                {!m.completed_at && (
+                {m.completed_at ? (
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => void markComplete(m.id)}
-                    disabled={completing.has(m.id)}
+                    variant="ghost"
+                    className="text-green-600 shrink-0"
+                    onClick={() => onStartCourse?.(m)}
                   >
-                    {completing.has(m.id) ? 'Saving…' : 'Mark done'}
+                    <CheckCircle2 className="h-4 w-4 mr-1" /> Review
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="shrink-0"
+                    onClick={() => onStartCourse?.(m)}
+                  >
+                    <PlayCircle className="h-3.5 w-3.5 mr-1" /> Start Course
                   </Button>
                 )}
               </CardContent>

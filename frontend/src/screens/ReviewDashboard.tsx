@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckSquare, ChevronRight, ChevronDown, XCircle, CheckCircle2 } from 'lucide-react';
+import { CheckSquare, ChevronRight, ChevronDown, XCircle, CheckCircle2, Info } from 'lucide-react';
 import type { TrainingModule, SseEvent } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,7 @@ export default function ReviewDashboard({ companyId, onFinish }: Props) {
   const [regenContent, setRegenContent] = useState<Record<string, string>>({});
   const [regenActive, setRegenActive] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [rationaleExpanded, setRationaleExpanded] = useState<Set<string>>(new Set());
 
   async function fetchModules() {
     const res = await fetch(`/api/modules/${companyId}`);
@@ -143,6 +144,29 @@ export default function ReviewDashboard({ companyId, onFinish }: Props) {
                   </Button>
                 </div>
               </div>
+
+              {/* Why this module? — rationale explainability */}
+              {mod.rationale && (
+                <div className="mt-2">
+                  <button
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setRationaleExpanded(prev => {
+                      const s = new Set(prev);
+                      s.has(mod.id) ? s.delete(mod.id) : s.add(mod.id);
+                      return s;
+                    })}
+                  >
+                    <Info className="h-3.5 w-3.5 text-blue-500" />
+                    Why assigned
+                    {rationaleExpanded.has(mod.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  </button>
+                  {rationaleExpanded.has(mod.id) && (
+                    <div className="mt-2 px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50">
+                      <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{mod.rationale}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardHeader>
 
             {expanded === mod.id && (

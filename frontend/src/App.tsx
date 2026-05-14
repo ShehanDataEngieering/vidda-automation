@@ -11,9 +11,11 @@ import DocumentManager from './screens/DocumentManager';
 import ComplianceChat from './screens/ComplianceChat';
 import TrainingDashboard from './screens/TrainingDashboard';
 import UserManagement from './screens/UserManagement';
+import CoursePlayer from './screens/CoursePlayer';
+import type { TrainingModuleWithProgress } from './types';
 
 type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
-type EmployeeScreen = 'chat' | 'training';
+type EmployeeScreen = 'chat' | 'training' | 'course';
 type Screen = AdminScreen | EmployeeScreen;
 
 function AuthedApp() {
@@ -24,6 +26,7 @@ function AuthedApp() {
   const [companyId, setCompanyId] = useState<string>(
     (user?.publicMetadata?.companyId as string | undefined) ?? '',
   );
+  const [activeCourseModule, setActiveCourseModule] = useState<TrainingModuleWithProgress | null>(null);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -45,7 +48,23 @@ function AuthedApp() {
         {role === 'admin' && screen === 'users' && <UserManagement />}
 
         {role === 'employee' && screen === 'chat' && <ComplianceChat />}
-        {role === 'employee' && screen === 'training' && <TrainingDashboard />}
+        {role === 'employee' && screen === 'training' && (
+          <TrainingDashboard
+            onStartCourse={(m) => {
+              setActiveCourseModule(m);
+              setScreen('course');
+            }}
+          />
+        )}
+        {role === 'employee' && screen === 'course' && activeCourseModule && (
+          <CoursePlayer
+            module={activeCourseModule}
+            onBack={() => setScreen('training')}
+            onComplete={() => {
+              setActiveCourseModule(prev => prev ? { ...prev, completed_at: new Date().toISOString() } : null);
+            }}
+          />
+        )}
       </main>
     </div>
   );

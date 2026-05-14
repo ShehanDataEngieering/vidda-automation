@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { requireSignedIn, requireRole } from '../middleware/auth';
 import { getUserContext } from '../utils/user';
 import { db as pool } from '../db/client';
+import { generateQuiz } from '../services/llm/quizGeneration';
+import { streamModuleAnswer } from '../services/llm/moduleChat';
+import type { QuizQuestion } from '../services/llm/quizGeneration';
 
 export const trainingRouter = Router();
 
@@ -22,6 +25,8 @@ trainingRouter.get('/my-modules', async (req: Request, res: Response) => {
        tm.role,
        tm.content,
        tm.quality_score,
+       tm.rationale,
+       tm.risk_dimensions,
        tm.created_at,
        mc.completed_at
      FROM training_modules tm
@@ -101,4 +106,166 @@ trainingRouter.get('/my-progress', async (req: Request, res: Response) => {
       completed: Number(r.completed),
     })),
   });
+});
+
+/**
+ * GET /api/training/my-modules/:id/quiz
+ * Returns cached quiz questions, or generates + caches them on first call (~10s).
+ */
+trainingRouter.get('/my-modules/:id/quiz', async (req: Request, res: Response) => {
+  const user = getUserContext(req, res);
+  if (!user) return;
+
+  const moduleId = req.params.id;
+
+  // Verify module belongs to this company
+  const { rows: mods } = await pool.query<{ content: string; regulation: string; role: string }>(
+    `SELECT content, regulation, role FROM training_modules
+     WHERE id = $1 AND company_id = $2 AND status = 'approved'`,
+    [moduleId, user.companyId],
+  );
+  const mod = mods[0];
+  if (!mod) {
+    res.status(404).json({ error: 'Module not found' });
+    return;
+  }
+
+  // Return cached quiz if it exists
+  const { rows: cached } = await pool.query<{ questions: QuizQuestion[] }>(
+    `SELECT questions FROM module_quizzes WHERE module_id = $1`,
+    [moduleId],
+  );
+  if (cached[0]) {
+    res.json({ questions: cached[0].questions });
+    return;
+  }
+
+  // Generate fresh quiz
+  try {
+    const questions = await generateQuiz(mod.content ?? '', mod.regulation, mod.role);
+
+    // Cache it
+    await pool.query(
+      `INSERT INTO module_quizzes (module_id, questions)
+       VALUES ($1, $2)
+       ON CONFLICT (module_id) DO UPDATE SET questions = $2`,
+      [moduleId, JSON.stringify(questions)],
+    );
+
+    res.json({ questions });
+  } catch (err) {
+    console.error('[quiz] Generation error:', err);
+    res.status(500).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+/**
+ * POST /api/training/my-modules/:id/quiz/submit
+ * Scores a quiz submission. If score >= 70, marks module complete.
+ */
+trainingRouter.post('/my-modules/:id/quiz/submit', async (req: Request, res: Response) => {
+  const user = getUserContext(req, res);
+  if (!user) return;
+
+  const moduleId = req.params.id;
+  const { answers } = req.body as { answers: Record<string, string> };
+
+  // Load cached quiz
+  const { rows } = await pool.query<{ questions: QuizQuestion[] }>(
+    `SELECT questions FROM module_quizzes WHERE module_id = $1`,
+    [moduleId],
+  );
+  const quiz = rows[0];
+  if (!quiz) {
+    res.status(404).json({ error: 'Quiz not found — call GET /quiz first' });
+    return;
+  }
+
+  const questions = quiz.questions;
+  let correct = 0;
+  const results = questions.map((q, i) => {
+    const key = `q${i}`;
+    const given = answers[key] ?? '';
+    const isCorrect = given === q.correct;
+    if (isCorrect) correct++;
+    return {
+      question: q.question,
+      yourAnswer: given,
+      correctAnswer: q.correct,
+      isCorrect,
+      explanation: q.explanation,
+      options: q.options,
+    };
+  });
+
+  const score = Math.round((correct / questions.length) * 100);
+  const passed = score >= 70;
+
+  // Store attempt
+  await pool.query(
+    `INSERT INTO quiz_attempts (module_id, user_id, answers, score, passed)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [moduleId, user.userId, JSON.stringify(answers), score, passed],
+  );
+
+  // Auto-complete module on pass
+  let completedAt: string | null = null;
+  if (passed) {
+    const { rows: comp } = await pool.query<{ completed_at: string }>(
+      `INSERT INTO module_completions (user_id, module_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, module_id) DO UPDATE SET completed_at = NOW()
+       RETURNING completed_at`,
+      [user.userId, moduleId],
+    );
+    completedAt = comp[0]?.completed_at ?? null;
+  }
+
+  res.json({ score, passed, completedAt, results });
+});
+
+/**
+ * POST /api/training/my-modules/:id/ask
+ * SSE stream: Claude answers a question grounded in the module content.
+ */
+trainingRouter.post('/my-modules/:id/ask', async (req: Request, res: Response) => {
+  const user = getUserContext(req, res);
+  if (!user) return;
+
+  const moduleId = req.params.id;
+  const { question } = req.body as { question: string };
+
+  if (!question?.trim()) {
+    res.status(400).json({ error: 'question is required' });
+    return;
+  }
+
+  const { rows: mods } = await pool.query<{ content: string; regulation: string; role: string }>(
+    `SELECT content, regulation, role FROM training_modules
+     WHERE id = $1 AND company_id = $2 AND status = 'approved'`,
+    [moduleId, user.companyId],
+  );
+  const mod = mods[0];
+  if (!mod) {
+    res.status(404).json({ error: 'Module not found' });
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  try {
+    for await (const token of streamModuleAnswer(question, mod.content ?? '', mod.regulation, mod.role)) {
+      res.write(`data: ${JSON.stringify({ type: 'token', token })}\n\n`);
+    }
+    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+  } catch (err) {
+    console.error('[moduleChat] error:', err);
+    res.write(`data: ${JSON.stringify({ type: 'error', error: 'Failed to generate answer' })}\n\n`);
+  } finally {
+    res.end();
+  }
 });

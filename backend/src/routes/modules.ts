@@ -19,7 +19,7 @@ modulesRouter.get('/:companyId', async (req: Request, res: Response) => {
   try {
     const result = await db.query(
       `SELECT id, regulation, role, content, quality_score, quality_breakdown,
-              citation_grounded, status, version, created_at, updated_at
+              citation_grounded, status, version, rationale, risk_dimensions, created_at, updated_at
        FROM training_modules WHERE company_id = $1 ORDER BY created_at ASC`,
       [parsed.data]
     );

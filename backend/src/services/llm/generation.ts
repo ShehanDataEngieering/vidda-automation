@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { filterPII } from '../piiFilter';
-import type { SearchResult } from '../../types';
+import type { SearchResult, RoleProfile } from '../../types';
 
 const anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
 
@@ -39,11 +39,36 @@ This module was human-reviewed before distribution, satisfying EU AI Act Article
 ASSESSMENT:
 [One scenario-based question testing whether the learner can apply the correct procedure — not memory recall]`;
 
+function buildRoleContextBlock(roleProfile: RoleProfile, regulation: string, score: number, severity: string): string {
+  const dims = roleProfile.riskDimensions;
+  const riskLine = [
+    `AML ${dims.aml.toUpperCase()}`,
+    `Sanctions ${dims.sanctions.toUpperCase()}`,
+    `Fraud ${dims.fraud.toUpperCase()}`,
+    `Documentation ${dims.documentation.toUpperCase()}`,
+  ].join(' · ');
+  const articles = roleProfile.regulatoryArticles.length > 0
+    ? roleProfile.regulatoryArticles.join(', ')
+    : 'General compliance obligations';
+
+  return `
+ROLE CONTEXT (use to tailor content specificity):
+Title: ${roleProfile.title}
+Description: ${roleProfile.description}
+Risk Exposure: ${riskLine}
+Applicable Articles: ${articles}
+Training Trigger: Governance score ${score} — ${severity.toUpperCase()} gap in ${regulation} compliance
+`;
+}
+
 export async function* streamModule(
   regulation: string,
   role: string,
   chunks: SearchResult[],
-  rejectionReason?: string
+  rejectionReason?: string,
+  roleProfile?: RoleProfile,
+  gapScore?: number,
+  severity?: string
 ): AsyncGenerator<string> {
   const chunksContext = chunks
     .map((c, i) => `[Source ${i + 1}] ${c.article_reference}:\n${filterPII(c.content)}`)
@@ -53,13 +78,17 @@ export async function* streamModule(
     ? `\n\nPREVIOUS VERSION REJECTED.\nReason: ${rejectionReason}\nAddress this feedback specifically in the new version.`
     : '';
 
+  const roleContextBlock = roleProfile
+    ? buildRoleContextBlock(roleProfile, regulation, gapScore ?? 0, severity ?? 'medium')
+    : '';
+
   const userPrompt = `PURPOSE: Internal staff compliance training — helping employees meet their legal obligations under financial regulation.
 
 Generate a regulatory compliance training module for:
 
 ROLE: ${role}
 REGULATION: ${regulation}
-
+${roleContextBlock}
 REGULATORY SOURCE EXCERPTS (use ONLY this content — do not add external knowledge):
 
 ${chunksContext}${rejectionBlock}

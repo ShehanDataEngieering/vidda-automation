@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Separator } from '@/components/ui/separator';
 
 type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
-type EmployeeScreen = 'chat' | 'training';
+type EmployeeScreen = 'chat' | 'training' | 'course';
 type Screen = AdminScreen | EmployeeScreen;
 
 interface NavBarProps {

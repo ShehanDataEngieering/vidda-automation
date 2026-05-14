@@ -17,11 +17,27 @@ export interface SearchResult {
   finalScore: number;
 }
 
+export interface RiskDimensions {
+  aml: 'high' | 'medium' | 'low' | 'none';
+  sanctions: 'high' | 'medium' | 'low' | 'none';
+  fraud: 'high' | 'medium' | 'low' | 'none';
+  documentation: 'high' | 'medium' | 'low' | 'none';
+}
+
+export interface RoleProfile {
+  title: string;
+  description: string;
+  riskDimensions: RiskDimensions;
+  regulatoryArticles: string[];
+}
+
 export interface Gap {
   regulation: string;
   score: number;
   severity: 'critical' | 'high' | 'medium';
   affectedRoles: string[];
+  rationale: string;
+  roleProfiles: Record<string, RoleProfile>;
 }
 
 export interface QualityResult {
@@ -80,6 +96,8 @@ export interface TrainingModule {
   citation_grounded: boolean;
   status: 'pending' | 'approved' | 'rejected';
   version: number;
+  rationale: string | null;
+  risk_dimensions: RiskDimensions | null;
   created_at: string;
   updated_at: string;
 }

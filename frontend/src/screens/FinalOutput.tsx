@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Shield, ChevronDown, ChevronRight, Printer, CheckCircle2 } from 'lucide-react';
-import type { TrainingModule } from '../types';
+import type { TrainingModule, RiskDimensions } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,70 @@ import { Separator } from '@/components/ui/separator';
 
 interface Review { id: string; action: string; reviewer: string; comment: string | null; created_at: string; }
 interface Props { companyId: string; }
+
+// ---------------------------------------------------------------------------
+// Risk Heatmap
+// ---------------------------------------------------------------------------
+
+const RISK_DIMS: (keyof RiskDimensions)[] = ['aml', 'sanctions', 'fraud', 'documentation'];
+const DIM_LABELS: Record<keyof RiskDimensions, string> = {
+  aml: 'AML', sanctions: 'Sanctions', fraud: 'Fraud', documentation: 'Docs'
+};
+
+function riskCell(level: string) {
+  const base = 'inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase w-16';
+  if (level === 'high') return `${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`;
+  if (level === 'medium') return `${base} bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300`;
+  if (level === 'low') return `${base} bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300`;
+  return `${base} bg-muted text-muted-foreground`;
+}
+
+function RiskHeatmap({ modules }: { modules: TrainingModule[] }) {
+  // Collect roles that have risk_dimensions
+  const roleMap: Record<string, RiskDimensions> = {};
+  for (const mod of modules) {
+    if (mod.risk_dimensions && !roleMap[mod.role]) {
+      roleMap[mod.role] = mod.risk_dimensions;
+    }
+  }
+  const roles = Object.keys(roleMap);
+  if (roles.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold mb-3">Risk–Role Matrix</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-separate border-spacing-1">
+          <thead>
+            <tr>
+              <th className="text-left text-xs font-medium text-muted-foreground py-1 pr-4 w-48">Role</th>
+              {RISK_DIMS.map(d => (
+                <th key={d} className="text-center text-xs font-medium text-muted-foreground py-1 w-20">
+                  {DIM_LABELS[d]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {roles.map(role => {
+              const dims = roleMap[role]!;
+              return (
+                <tr key={role}>
+                  <td className="text-xs font-medium pr-4 py-1 whitespace-nowrap">{role}</td>
+                  {RISK_DIMS.map(d => (
+                    <td key={d} className="text-center py-1">
+                      <span className={riskCell(dims[d])}>{dims[d]}</span>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 const COMPLIANCE_ITEMS = [
   'Human review gate implemented',
@@ -63,6 +127,9 @@ export default function FinalOutput({ companyId }: Props) {
           <Printer className="h-4 w-4 mr-2" /> Print / Export
         </Button>
       </div>
+
+      {/* Risk Heatmap */}
+      <RiskHeatmap modules={modules} />
 
       {/* Compliance summary */}
       <Card className="mb-6 border-green-500/30 bg-green-50/50 dark:bg-green-950/20">

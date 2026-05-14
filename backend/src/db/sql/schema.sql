@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS training_modules (
   quality_breakdown JSONB,
   citation_grounded BOOLEAN DEFAULT false,
   version INTEGER DEFAULT 1,
+  rationale TEXT,
+  risk_dimensions JSONB,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -145,3 +147,25 @@ CREATE TABLE IF NOT EXISTS module_completions (
   UNIQUE (user_id, module_id)
 );
 CREATE INDEX IF NOT EXISTS idx_completions_user ON module_completions(user_id);
+
+-- =============================================================================
+-- V5: Interactive Course Player
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS module_quizzes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  module_id  UUID REFERENCES training_modules(id) ON DELETE CASCADE,
+  questions  JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (module_id)
+);
+
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  module_id  UUID REFERENCES training_modules(id) ON DELETE CASCADE,
+  user_id    VARCHAR(255) NOT NULL,
+  answers    JSONB NOT NULL,
+  score      INTEGER NOT NULL,
+  passed     BOOLEAN NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);

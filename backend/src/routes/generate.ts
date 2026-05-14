@@ -87,10 +87,17 @@ generateRouter.post('/', async (req: Request, res: Response) => {
 
         send({ type: 'stage', message: `⚖️ Reranking results for ${role}...` });
 
+        const roleProfile = gap.roleProfiles[role];
         const moduleInsert = await db.query<{ id: string }>(
-          `INSERT INTO training_modules (company_id, regulation, role, status)
-           VALUES ($1, $2, $3, 'pending') RETURNING id`,
-          [companyId, gap.regulation, role]
+          `INSERT INTO training_modules (company_id, regulation, role, rationale, risk_dimensions, status)
+           VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id`,
+          [
+            companyId,
+            gap.regulation,
+            role,
+            gap.rationale,
+            roleProfile ? JSON.stringify(roleProfile.riskDimensions) : null,
+          ]
         );
         const moduleId = moduleInsert.rows[0]?.id;
         if (!moduleId) throw new Error('Failed to insert training module');
@@ -99,7 +106,7 @@ generateRouter.post('/', async (req: Request, res: Response) => {
         send({ type: 'stage', message: `🤖 Generating: ${gap.regulation} — ${role}...` });
 
         let fullContent = '';
-        for await (const text of streamModule(gap.regulation, role, chunks)) {
+        for await (const text of streamModule(gap.regulation, role, chunks, undefined, roleProfile, gap.score, gap.severity)) {
           fullContent += text;
           send({ type: 'chunk', content: text, moduleId });
         }

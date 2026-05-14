@@ -1,3 +1,11 @@
+/** V5 Risk Dimensions */
+export interface RiskDimensions {
+  aml: 'high' | 'medium' | 'low' | 'none';
+  sanctions: 'high' | 'medium' | 'low' | 'none';
+  fraud: 'high' | 'medium' | 'low' | 'none';
+  documentation: 'high' | 'medium' | 'low' | 'none';
+}
+
 /** V2 SSE event types */
 export type SseEvent =
   | { type: 'stage'; message: string }
@@ -18,6 +26,8 @@ export interface TrainingModule {
   citation_grounded: boolean;
   status: 'pending' | 'approved' | 'rejected';
   version: number;
+  rationale: string | null;
+  risk_dimensions: RiskDimensions | null;
   created_at: string;
 }
 

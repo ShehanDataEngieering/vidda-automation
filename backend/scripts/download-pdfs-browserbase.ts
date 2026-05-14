@@ -2,8 +2,8 @@
  * Downloads EUR-Lex compliance PDFs using Browserbase (cloud browser).
  * Bypasses CloudFront WAF that blocks direct curl requests.
  *
- * Usage:
- *   BROWSERBASE_API_KEY=... BROWSERBASE_PROJECT_ID=... npx ts-node scripts/download-pdfs-browserbase.ts
+ * Usage: npm run download-pdfs
+ * Requires BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID in .env
  */
 
 import Browserbase from '@browserbasehq/sdk';
@@ -32,54 +32,90 @@ const PDFS = [
 const OUT_DIR = path.join(__dirname, '../src/db/pdfs');
 
 async function downloadPdf(
-  page: Awaited<ReturnType<Awaited<ReturnType<typeof chromium.connectOverCDP>>['newPage']>>,
+  browser: Awaited<ReturnType<typeof chromium.connectOverCDP>>,
   pdf: { name: string; url: string },
 ): Promise<void> {
-  console.log(`  Navigating to ${pdf.name}...`);
+  const outPath = path.join(OUT_DIR, pdf.name);
+  console.log(`  Downloading ${pdf.name}...`);
 
-  // Use response interception to capture the PDF bytes
-  const responsePromise = page.waitForResponse(
-    r => r.url().includes('CELEX') && r.status() === 200,
-    { timeout: 60_000 },
-  );
+  // Fresh context + page per PDF — isolates cookies/state
+  const context = await browser.newContext();
+  const page = await context.newPage();
 
-  await page.goto(pdf.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-
-  let bytes: Buffer | null = null;
+  // Use wrapper object — avoids TypeScript narrowing capturedBytes to 'never'
+  // inside async route callbacks
+  const captured = { bytes: Buffer.alloc(0) };
 
   try {
-    const response = await responsePromise;
-    const contentType = response.headers()['content-type'] ?? '';
-    if (contentType.includes('pdf')) {
-      bytes = Buffer.from(await response.body());
-      console.log(`  Captured via response interception (${bytes.length} bytes)`);
+    // Intercept ALL responses — catch the PDF regardless of redirects
+    await page.route('**/*', async (route) => {
+      let response;
+      try {
+        response = await route.fetch();
+      } catch {
+        await route.continue();
+        return;
+      }
+
+      const ct = (response.headers()['content-type'] ?? '').toLowerCase();
+      const cd = (response.headers()['content-disposition'] ?? '').toLowerCase();
+      const isPdf = ct.includes('pdf') || cd.includes('.pdf') || cd.includes('attachment');
+
+      if (isPdf && captured.bytes.length === 0) {
+        try {
+          const body = await response.body();
+          if (body.length > 0) {
+            captured.bytes = Buffer.from(body);
+            console.log(`  Intercepted PDF: ${captured.bytes.length} bytes`);
+          }
+        } catch { /* body read failed */ }
+      }
+
+      // Strip Content-Disposition so the browser doesn't treat it as a download
+      try {
+        const headers = { ...response.headers() };
+        delete headers['content-disposition'];
+        await route.fulfill({
+          status: response.status(),
+          headers,
+          body: await response.body().catch(() => Buffer.alloc(0)),
+        });
+      } catch {
+        await route.continue();
+      }
+    });
+
+    await page.goto(pdf.url, { waitUntil: 'load', timeout: 120_000 }).catch(() => {});
+
+    // Fallback: if interception missed it, fetch from page context using session cookies
+    if (captured.bytes.length < 5_000) {
+      console.log(`  Trying in-page fetch fallback...`);
+      const base64: string = await page.evaluate(async (url: string) => {
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = await res.arrayBuffer();
+        const u8 = new Uint8Array(buf);
+        let str = '';
+        const CHUNK = 8192;
+        for (let i = 0; i < u8.length; i += CHUNK) {
+          str += String.fromCharCode(...u8.subarray(i, i + CHUNK));
+        }
+        return btoa(str);
+      }, pdf.url);
+      captured.bytes = Buffer.from(base64, 'base64');
+      console.log(`  In-page fetch: ${captured.bytes.length} bytes`);
     }
-  } catch {
-    // fallback: fetch directly from page context using browser cookies
-  }
 
-  if (!bytes) {
-    console.log(`  Falling back to in-page fetch...`);
-    const base64 = await page.evaluate(async (url: string) => {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = await res.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      for (const b of bytes) binary += String.fromCharCode(b);
-      return btoa(binary);
-    }, pdf.url);
-    bytes = Buffer.from(base64, 'base64');
-    console.log(`  Fetched via in-page fetch (${bytes.length} bytes)`);
-  }
+    if (captured.bytes.length < 5_000) {
+      throw new Error(`PDF too small (${captured.bytes.length} bytes) — EUR-Lex may be blocking`);
+    }
 
-  if (bytes.length < 1000) {
-    throw new Error(`PDF too small (${bytes.length} bytes) — likely an error page`);
+    fs.writeFileSync(outPath, captured.bytes);
+    console.log(`  ✅ ${pdf.name} — ${(captured.bytes.length / 1024).toFixed(0)} KB`);
+  } finally {
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
   }
-
-  const outPath = path.join(OUT_DIR, pdf.name);
-  fs.writeFileSync(outPath, bytes);
-  console.log(`  ✅ Saved ${pdf.name} (${(bytes.length / 1024).toFixed(0)} KB)`);
 }
 
 async function main() {
@@ -89,32 +125,29 @@ async function main() {
 
   console.log('Creating Browserbase session...');
   const session = await bb.sessions.create({ projectId: PROJECT_ID });
-  console.log(`Session ID: ${session.id}`);
+  console.log(`Session ID: ${session.id}\n`);
 
   const browser = await chromium.connectOverCDP(session.connectUrl);
-  const context = browser.contexts()[0] ?? await browser.newContext();
-  const page = await context.newPage();
 
   let failed = 0;
   for (const pdf of PDFS) {
     const existing = path.join(OUT_DIR, pdf.name);
     if (fs.existsSync(existing) && fs.statSync(existing).size > 10_000) {
-      console.log(`  [skip] ${pdf.name} already downloaded`);
+      console.log(`  [skip] ${pdf.name} already exists`);
       continue;
     }
     try {
-      await downloadPdf(page, pdf);
+      await downloadPdf(browser, pdf);
     } catch (err) {
-      console.error(`  ❌ Failed ${pdf.name}: ${err}`);
+      console.error(`  ❌ ${pdf.name}: ${err}`);
       failed++;
     }
-    // Brief pause between requests
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 1500));
   }
 
-  await browser.close();
+  await browser.close().catch(() => {});
 
-  console.log('\nDone. Files in', OUT_DIR);
+  console.log('\nFiles in', OUT_DIR);
   const files = fs.readdirSync(OUT_DIR).filter(f => f.endsWith('.pdf'));
   for (const f of files) {
     const size = fs.statSync(path.join(OUT_DIR, f)).size;
@@ -122,11 +155,10 @@ async function main() {
   }
 
   if (failed > 0) {
-    console.error(`\n${failed} PDF(s) failed — check errors above`);
+    console.error(`\n${failed} PDF(s) failed`);
     process.exit(1);
   }
-
-  console.log('\nNow run: npm run seed');
+  console.log('\nRun next: npm run seed');
 }
 
 main().catch(err => {
