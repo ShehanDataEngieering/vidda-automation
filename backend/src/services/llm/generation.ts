@@ -1,6 +1,6 @@
 import { filterPII } from '../piiFilter';
 import type { SearchResult, RoleProfile } from '../../types';
-import { openrouter, DEFAULT_MODEL } from './openrouter';
+import { openrouter, DEFAULT_MODEL, GENERATION_TEMPERATURE } from './openrouter';
 
 const SYSTEM_PROMPT = `You are a senior regulatory compliance training author working for a licensed Nordic financial institution. Your sole purpose is to produce internal staff education materials that help employees understand, detect, and comply with financial regulations — thereby PREVENTING regulatory breaches and financial crime.
 
@@ -95,7 +95,8 @@ Write the training module now. Frame all content from the perspective of what st
 
   const stream = await openrouter.chat.completions.create({
     model: DEFAULT_MODEL,
-    max_tokens: 1200,
+    max_tokens: 2500,
+    temperature: GENERATION_TEMPERATURE,
     stream: true,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },

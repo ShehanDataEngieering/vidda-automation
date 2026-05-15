@@ -1,5 +1,5 @@
 import { filterPII } from '../piiFilter';
-import { openrouter, DEFAULT_MODEL } from './openrouter';
+import { openrouter, DEFAULT_MODEL, MODULE_CHAT_TEMPERATURE } from './openrouter';
 
 const MODULE_CHAT_SYSTEM = `You are a compliance learning assistant embedded inside a specific training module.
 Your ONLY knowledge source is the training module content provided in the user message.
@@ -31,6 +31,7 @@ Answer based ONLY on the module content above.`;
   const stream = await openrouter.chat.completions.create({
     model: DEFAULT_MODEL,
     max_tokens: 400,
+    temperature: MODULE_CHAT_TEMPERATURE,
     stream: true,
     messages: [
       { role: 'system', content: MODULE_CHAT_SYSTEM },

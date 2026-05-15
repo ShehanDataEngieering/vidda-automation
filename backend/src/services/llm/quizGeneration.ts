@@ -1,4 +1,4 @@
-import { openrouter, DEFAULT_MODEL } from './openrouter';
+import { openrouter, DEFAULT_MODEL, QUIZ_TEMPERATURE } from './openrouter';
 
 export interface QuizQuestion {
   question: string;
@@ -47,6 +47,7 @@ Return ONLY the JSON array — no other text.`;
   const message = await openrouter.chat.completions.create({
     model: DEFAULT_MODEL,
     max_tokens: 1500,
+    temperature: QUIZ_TEMPERATURE,
     messages: [
       { role: 'system', content: QUIZ_SYSTEM },
       { role: 'user', content: userPrompt },

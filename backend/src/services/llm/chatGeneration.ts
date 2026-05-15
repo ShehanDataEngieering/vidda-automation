@@ -1,6 +1,6 @@
 import { filterPII } from '../piiFilter';
 import type { DocSearchResult } from '../rag/documentSearch';
-import { openrouter, DEFAULT_MODEL } from './openrouter';
+import { openrouter, DEFAULT_MODEL, CHAT_TEMPERATURE } from './openrouter';
 
 export interface ChatCitation {
   documentName: string;
@@ -55,7 +55,8 @@ export async function* streamChatAnswer(
 
   const stream = await openrouter.chat.completions.create({
     model: DEFAULT_MODEL,
-    max_tokens: 1024,
+    max_tokens: 500,
+    temperature: CHAT_TEMPERATURE,
     stream: true,
     messages,
   });
