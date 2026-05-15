@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS regulatory_chunks (
   article_reference VARCHAR(150),
   entities TEXT[] DEFAULT '{}',
   content TEXT NOT NULL,
-  embedding vector(1536),
+  embedding vector(1024),
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE (regulation, article_number)
 );
@@ -63,9 +63,9 @@ CREATE TABLE IF NOT EXISTS reviews (
 CREATE INDEX IF NOT EXISTS idx_chunks_fts ON regulatory_chunks
   USING GIN (to_tsvector('english', content));
 
--- IVFFlat index for pgvector (Week 2)
--- CREATE INDEX idx_chunks_vector ON regulatory_chunks
---   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
+-- IVFFlat index for pgvector vector search
+CREATE INDEX IF NOT EXISTS idx_chunks_vector ON regulatory_chunks
+  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
 
 -- =============================================================================
 -- V3: PDF Document Upload
@@ -94,13 +94,19 @@ CREATE TABLE IF NOT EXISTS document_chunks (
   section_number  VARCHAR(50),
   page_number     INTEGER,
   content         TEXT NOT NULL,
-  embedding       vector(1536),
+  embedding       vector(1024),
+  chunk_type      VARCHAR(20) DEFAULT 'child',
+  parent_chunk_id UUID REFERENCES document_chunks(id),
   created_at      TIMESTAMP DEFAULT NOW(),
   UNIQUE (document_id, chunk_index)
 );
 CREATE INDEX IF NOT EXISTS idx_doc_chunks_company ON document_chunks(company_id);
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_type ON document_chunks(chunk_type);
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_parent ON document_chunks(parent_chunk_id);
 CREATE INDEX IF NOT EXISTS idx_doc_chunks_fts ON document_chunks
   USING GIN (to_tsvector('english', content));
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_vector ON document_chunks
+  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
 
 CREATE TABLE IF NOT EXISTS chunk_relationships (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
