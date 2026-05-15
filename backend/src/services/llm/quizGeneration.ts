@@ -1,6 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
+import { openrouter, DEFAULT_MODEL } from './openrouter';
 
 export interface QuizQuestion {
   question: string;
@@ -46,14 +44,16 @@ ${moduleContent.slice(0, 4000)}
 Generate questions that test whether the employee can APPLY the correct procedure in real workplace situations.
 Return ONLY the JSON array — no other text.`;
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+  const message = await openrouter.chat.completions.create({
+    model: DEFAULT_MODEL,
     max_tokens: 1500,
-    system: QUIZ_SYSTEM,
-    messages: [{ role: 'user', content: userPrompt }],
+    messages: [
+      { role: 'system', content: QUIZ_SYSTEM },
+      { role: 'user', content: userPrompt },
+    ],
   });
 
-  const raw = message.content[0]?.type === 'text' ? message.content[0].text : '[]';
+  const raw = message.choices[0]?.message?.content ?? '[]';
 
   // Strip potential markdown code fences
   const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();

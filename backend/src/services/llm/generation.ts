@@ -1,8 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { filterPII } from '../piiFilter';
 import type { SearchResult, RoleProfile } from '../../types';
-
-const anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
+import { openrouter, DEFAULT_MODEL } from './openrouter';
 
 const SYSTEM_PROMPT = `You are a senior regulatory compliance training author working for a licensed Nordic financial institution. Your sole purpose is to produce internal staff education materials that help employees understand, detect, and comply with financial regulations — thereby PREVENTING regulatory breaches and financial crime.
 
@@ -95,19 +93,18 @@ ${chunksContext}${rejectionBlock}
 
 Write the training module now. Frame all content from the perspective of what staff must do to comply. Every factual claim must be traceable to the source excerpts above.`;
 
-  const stream = await anthropic.messages.stream({
-    model: 'claude-sonnet-4-6',
+  const stream = await openrouter.chat.completions.create({
+    model: DEFAULT_MODEL,
     max_tokens: 1200,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
+    stream: true,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
   });
 
-  for await (const event of stream) {
-    if (
-      event.type === 'content_block_delta' &&
-      event.delta.type === 'text_delta'
-    ) {
-      yield event.delta.text;
-    }
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
   }
 }

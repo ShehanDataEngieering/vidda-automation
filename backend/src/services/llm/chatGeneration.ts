@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { filterPII } from '../piiFilter';
 import type { DocSearchResult } from '../rag/documentSearch';
+import { openrouter, DEFAULT_MODEL } from './openrouter';
 
 export interface ChatCitation {
   documentName: string;
@@ -11,8 +11,6 @@ export interface ChatCitation {
 
 const NOT_FOUND_SENTINEL =
   'This question is not covered in the uploaded compliance documents. Contact your Compliance Officer.';
-
-const client = new Anthropic();
 
 const SYSTEM_PROMPT = `You are a compliance assistant for a regulated financial institution.
 Your ONLY knowledge source is the document excerpts provided in the user turn.
@@ -49,25 +47,22 @@ export async function* streamChatAnswer(
 
   const userContent = `Compliance question: ${safeQuestion}\n\nDocument excerpts:\n${excerpts}`;
 
-  const messages: Anthropic.MessageParam[] = [
-    ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
-    { role: 'user', content: userContent },
+  const messages = [
+    { role: 'system' as const, content: SYSTEM_PROMPT },
+    ...history.slice(-10).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    { role: 'user' as const, content: userContent },
   ];
 
-  const stream = await client.messages.stream({
-    model: 'claude-sonnet-4-6',
+  const stream = await openrouter.chat.completions.create({
+    model: DEFAULT_MODEL,
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    stream: true,
     messages,
   });
 
-  for await (const event of stream) {
-    if (
-      event.type === 'content_block_delta' &&
-      event.delta.type === 'text_delta'
-    ) {
-      yield event.delta.text;
-    }
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
   }
 }
 

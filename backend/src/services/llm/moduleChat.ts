@@ -1,7 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { filterPII } from '../piiFilter';
-
-const anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
+import { openrouter, DEFAULT_MODEL } from './openrouter';
 
 const MODULE_CHAT_SYSTEM = `You are a compliance learning assistant embedded inside a specific training module.
 Your ONLY knowledge source is the training module content provided in the user message.
@@ -30,19 +28,18 @@ ${safeQuestion}
 
 Answer based ONLY on the module content above.`;
 
-  const stream = await anthropic.messages.stream({
-    model: 'claude-sonnet-4-6',
+  const stream = await openrouter.chat.completions.create({
+    model: DEFAULT_MODEL,
     max_tokens: 400,
-    system: MODULE_CHAT_SYSTEM,
-    messages: [{ role: 'user', content: userPrompt }],
+    stream: true,
+    messages: [
+      { role: 'system', content: MODULE_CHAT_SYSTEM },
+      { role: 'user', content: userPrompt },
+    ],
   });
 
-  for await (const event of stream) {
-    if (
-      event.type === 'content_block_delta' &&
-      event.delta.type === 'text_delta'
-    ) {
-      yield event.delta.text;
-    }
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
   }
 }

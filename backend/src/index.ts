@@ -15,7 +15,7 @@ import { logger } from './utils/logger';
 
 dotenv.config();
 
-const REQUIRED_ENV = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 'VOYAGE_API_KEY'] as const;
+const REQUIRED_ENV = ['DATABASE_URL', 'OPENROUTER_API_KEY', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 'VOYAGE_API_KEY'] as const;
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(`Missing required environment variable: ${key}`);
