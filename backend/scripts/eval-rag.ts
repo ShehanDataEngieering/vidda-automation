@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { runEvalSuite } from '../services/rag/eval';
+import { runEvalSuite } from '../src/services/rag/eval';
 
 async function main() {
   console.log('=== RAG Retrieval Evaluation ===\n');
