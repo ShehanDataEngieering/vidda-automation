@@ -1,5 +1,4 @@
 import { searchChunks } from './vectorSearch';
-import { embedText } from './embeddings';
 import { logger } from '../../utils/logger';
 import type { SearchResult } from '../../types';
 
@@ -233,7 +232,8 @@ export async function runEvalSuite(queries: EvalQuery[] = EVAL_QUERIES): Promise
     details,
   };
 
-  logger.info('RAG evaluation complete', summary);
+  logger.info('RAG evaluation complete');
+  console.log(JSON.stringify(summary, null, 2));
   return summary;
 }
 
