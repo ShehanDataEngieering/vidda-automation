@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useApi } from '../utils/api';
 
 const INDUSTRIES = ['Banking', 'Fintech', 'Insurance', 'Asset Management', 'Payment Services', 'Other'];
 const SIZES = ['1-50', '51-200', '201-500', '501-1000', '1000+'];
@@ -27,6 +28,7 @@ function severityBadge(score: number) {
 interface Props { onCompanyCreated: (id: string) => void; }
 
 export default function Onboarding({ onCompanyCreated }: Props) {
+  const api = useApi();
   const [name, setName] = useState('');
   const [industry, setIndustry] = useState(INDUSTRIES[0] ?? 'Banking');
   const [size, setSize] = useState(SIZES[3] ?? '501-1000');
@@ -51,9 +53,8 @@ export default function Onboarding({ onCompanyCreated }: Props) {
     try {
       const regulationsMap: Record<string, number> = {};
       for (const reg of selectedRegs) regulationsMap[reg] = scores[reg] ?? 50;
-      const res = await fetch('/api/company', {
+      const res = await api('/api/company', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, industry, size, regulations: regulationsMap }),
       });
       if (!res.ok) throw new Error();

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Cpu, CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react';
 import type { SseEvent } from '../types';
+import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,9 @@ interface ModuleCard {
 interface Props { companyId: string; onComplete: () => void; }
 
 export default function Generation({ companyId, onComplete }: Props) {
+  const api = useApi();
+  const apiRef = useRef(api);
+  apiRef.current = api;
   const [stageMsg, setStageMsg] = useState('Starting pipeline…');
   const [modules, setModules] = useState<ModuleCard[]>([]);
   const [complete, setComplete] = useState(false);
@@ -24,9 +28,8 @@ export default function Generation({ companyId, onComplete }: Props) {
     let closed = false;
     async function run() {
       try {
-        const res = await fetch('/api/generate', {
+        const res = await apiRef.current('/api/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ companyId }),
         });
         if (!res.ok || !res.body) { setError('Failed to start generation.'); return; }

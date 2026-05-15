@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
-import { Shield } from 'lucide-react';
+import { Shield, ShieldOff } from 'lucide-react';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import NavBar from './components/NavBar';
 import Onboarding from './screens/Onboarding';
 import Generation from './screens/Generation';
@@ -18,9 +19,36 @@ type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'document
 type EmployeeScreen = 'chat' | 'training' | 'course';
 type Screen = AdminScreen | EmployeeScreen;
 
+function AccessDenied() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center space-y-4 max-w-md p-6">
+        <ShieldOff className="h-12 w-12 text-destructive mx-auto" />
+        <h1 className="text-lg font-semibold">Access Denied</h1>
+        <p className="text-sm text-muted-foreground">
+          You do not have permission to view this page. Contact your administrator if you believe this is an error.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
+  if (role !== allowed) return <AccessDenied />;
+  return <>{children}</>;
+}
+
+function AdminGate({ role, children }: { role: 'admin' | 'employee'; children: ReactNode }) {
+  return <RoleGate role={role} allowed="admin">{children}</RoleGate>;
+}
+
+function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children: ReactNode }) {
+  return <RoleGate role={role} allowed="employee">{children}</RoleGate>;
+}
+
 function AuthedApp() {
   const { user } = useUser();
-  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'admin';
+  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
 
   const [screen, setScreen] = useState<Screen>(role === 'admin' ? 'onboarding' : 'chat');
   const [companyId, setCompanyId] = useState<string>(
@@ -32,39 +60,43 @@ function AuthedApp() {
     <div className="flex min-h-screen bg-background">
       <NavBar role={role} screen={screen} onNavigate={setScreen} />
       <main className="ml-56 flex-1 min-h-screen">
-        {role === 'admin' && screen === 'onboarding' && (
-          <Onboarding onCompanyCreated={(id) => { setCompanyId(id); setScreen('generation'); }} />
-        )}
-        {role === 'admin' && screen === 'generation' && companyId && (
-          <Generation companyId={companyId} onComplete={() => setScreen('review')} />
-        )}
-        {role === 'admin' && screen === 'review' && companyId && (
-          <ReviewDashboard companyId={companyId} onFinish={() => setScreen('output')} />
-        )}
-        {role === 'admin' && screen === 'output' && companyId && (
-          <FinalOutput companyId={companyId} />
-        )}
-        {role === 'admin' && screen === 'documents' && <DocumentManager />}
-        {role === 'admin' && screen === 'users' && <UserManagement />}
+        <AdminGate role={role}>
+          {screen === 'onboarding' && (
+            <Onboarding onCompanyCreated={(id) => { setCompanyId(id); setScreen('generation'); }} />
+          )}
+          {screen === 'generation' && companyId && (
+            <Generation companyId={companyId} onComplete={() => setScreen('review')} />
+          )}
+          {screen === 'review' && companyId && (
+            <ReviewDashboard companyId={companyId} onFinish={() => setScreen('output')} />
+          )}
+          {screen === 'output' && companyId && (
+            <FinalOutput companyId={companyId} />
+          )}
+          {screen === 'documents' && <DocumentManager />}
+          {screen === 'users' && <UserManagement />}
+        </AdminGate>
 
-        {role === 'employee' && screen === 'chat' && <ComplianceChat />}
-        {role === 'employee' && screen === 'training' && (
-          <TrainingDashboard
-            onStartCourse={(m) => {
-              setActiveCourseModule(m);
-              setScreen('course');
-            }}
-          />
-        )}
-        {role === 'employee' && screen === 'course' && activeCourseModule && (
-          <CoursePlayer
-            module={activeCourseModule}
-            onBack={() => setScreen('training')}
-            onComplete={() => {
-              setActiveCourseModule(prev => prev ? { ...prev, completed_at: new Date().toISOString() } : null);
-            }}
-          />
-        )}
+        <EmployeeGate role={role}>
+          {screen === 'chat' && <ComplianceChat />}
+          {screen === 'training' && (
+            <TrainingDashboard
+              onStartCourse={(m) => {
+                setActiveCourseModule(m);
+                setScreen('course');
+              }}
+            />
+          )}
+          {screen === 'course' && activeCourseModule && (
+            <CoursePlayer
+              module={activeCourseModule}
+              onBack={() => setScreen('training')}
+              onComplete={() => {
+                setActiveCourseModule(prev => prev ? { ...prev, completed_at: new Date().toISOString() } : null);
+              }}
+            />
+          )}
+        </EmployeeGate>
       </main>
     </div>
   );
@@ -94,7 +126,7 @@ function AppInner() {
       Loading…
     </div>
   );
-  return isSignedIn ? <AuthedApp /> : <LoginPage />;
+  return isSignedIn ? <ErrorBoundary><AuthedApp /></ErrorBoundary> : <LoginPage />;
 }
 
 export default function App() {
