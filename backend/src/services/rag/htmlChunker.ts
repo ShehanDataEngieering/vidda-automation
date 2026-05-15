@@ -32,7 +32,8 @@ const LEGISLATION_DOCS: LegislationDoc[] = [
 
 const FETCH_TIMEOUT_MS = 45_000;
 const MIN_CHUNK_CHARS = 150;
-const MAX_CHUNK_CHARS = 2500;
+const MAX_CHUNK_CHARS = 1500;
+const OVERLAP_CHARS = 100;
 
 function cleanText(raw: string): string {
   return raw
@@ -54,7 +55,8 @@ function splitIfTooLong(content: string, max: number): string[] {
     const cutAt = slice.lastIndexOf('. ');
     const at = cutAt > max / 2 ? cutAt + 1 : max;
     parts.push(rest.slice(0, at).trim());
-    rest = rest.slice(at).trim();
+    const restartIdx = Math.max(0, at - OVERLAP_CHARS);
+    rest = rest.slice(restartIdx).trim();
   }
   if (rest.length >= MIN_CHUNK_CHARS) parts.push(rest);
   return parts;
@@ -99,7 +101,7 @@ function parseLegislationXml(xml: string, regulationName: string): RegulationChu
     for (let i = 0; i < parts.length; i++) {
       chunks.push({
         sectionNumber: parts.length > 1 ? `${rawNum}.${i + 1}` : rawNum,
-        sectionHeading: i === 0 ? heading : null,
+        sectionHeading: heading ? `${heading}${i > 0 ? ' (cont.)' : ''}` : null,
         content: parts[i]!,
         chunkIndex: chunkIndex++,
       });

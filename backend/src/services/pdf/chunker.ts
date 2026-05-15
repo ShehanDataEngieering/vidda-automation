@@ -35,6 +35,7 @@ const PARENT_MIN_CHARS = 800;
 const PARENT_MAX_CHARS = 2000;
 const CHILD_MIN_CHARS = 200;
 const CHILD_MAX_CHARS = 800;
+const CHILD_OVERLAP_CHARS = 80;
 
 const HEADING_PATTERNS = [
   /^\s*(Article|Section|Annex|Schedule|Appendix|Chapter)\s+([\d.]+[a-z]?)\b/i,
@@ -67,35 +68,44 @@ function splitIntoChildren(
   const paragraphs = parent.content.split(/\n\n+/).filter(p => p.trim().length > 0);
   const children: ChildChunk[] = [];
   let current = '';
+  let prevContent = '';
   let childIdx = baseChildIndex;
 
   for (const para of paragraphs) {
     const candidate = current ? current + '\n\n' + para : para;
     if (candidate.length > CHILD_MAX_CHARS && current.length >= CHILD_MIN_CHARS) {
+      const overlap = prevContent.length > CHILD_OVERLAP_CHARS
+        ? prevContent.slice(-CHILD_OVERLAP_CHARS)
+        : prevContent;
+      const content = prevContent ? overlap + '\n\n' + current.trim() : current.trim();
       children.push({
         chunkIndex: childIdx++,
         parentChunkIndex: parent.chunkIndex,
         sectionHeading: parent.sectionHeading,
         sectionNumber: parent.sectionNumber,
         pageNumber: parent.pageNumber,
-        content: current.trim(),
+        content,
       });
+      prevContent = current.trim();
       current = para;
     } else {
       current = candidate;
     }
   }
   if (current.trim().length >= CHILD_MIN_CHARS) {
+    const overlap = prevContent.length > CHILD_OVERLAP_CHARS
+      ? prevContent.slice(-CHILD_OVERLAP_CHARS)
+      : prevContent;
+    const content = prevContent ? overlap + '\n\n' + current.trim() : current.trim();
     children.push({
       chunkIndex: childIdx,
       parentChunkIndex: parent.chunkIndex,
       sectionHeading: parent.sectionHeading,
       sectionNumber: parent.sectionNumber,
       pageNumber: parent.pageNumber,
-      content: current.trim(),
+      content,
     });
   } else if (current.trim() && children.length > 0) {
-    // Append to last child rather than drop
     const last = children[children.length - 1];
     if (last) last.content += '\n\n' + current.trim();
   }
