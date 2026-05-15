@@ -39,22 +39,8 @@ function NotAuthorized() {
   );
 }
 
-function AccessDeniedPage() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center space-y-4 max-w-md p-6">
-        <ShieldOff className="h-12 w-12 text-destructive mx-auto" />
-        <h1 className="text-lg font-semibold">Access Denied</h1>
-        <p className="text-sm text-muted-foreground">
-          You do not have permission to view this page.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
-  if (role !== allowed) return <AccessDeniedPage />;
+  if (role !== allowed) return null;
   return <>{children}</>;
 }
 
