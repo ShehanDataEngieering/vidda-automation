@@ -1,4 +1,3 @@
-const { logger } = require('../utils/logger');
 
 interface CacheEntry {
   embedding: number[];
