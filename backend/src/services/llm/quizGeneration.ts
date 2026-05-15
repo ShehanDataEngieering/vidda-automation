@@ -1,4 +1,4 @@
-import { openrouter, DEFAULT_MODEL, QUIZ_TEMPERATURE } from './openrouter';
+import { openrouter, DEFAULT_MODEL, QUIZ_TEMPERATURE, FALLBACK_MODEL } from './openrouter';
 import { logger } from '../../utils/logger';
 
 export interface QuizQuestion {
@@ -54,17 +54,30 @@ ${moduleContent.slice(0, 4000)}
 Generate questions that test whether the employee can APPLY the correct procedure in real workplace situations.
 Return ONLY the JSON array — no other text.${extra}`;
 
-  const message = await openrouter.chat.completions.create({
-    model: DEFAULT_MODEL,
-    max_tokens: 1500,
-    temperature: strictMode ? 0.2 : QUIZ_TEMPERATURE,
-    messages: [
-      { role: 'system', content: QUIZ_SYSTEM + extra },
-      { role: 'user', content: userPrompt },
-    ],
-  });
-
-  return message.choices[0]?.message?.content ?? '[]';
+  try {
+    const message = await openrouter.chat.completions.create({
+      model: DEFAULT_MODEL,
+      max_tokens: 1500,
+      temperature: strictMode ? 0.2 : QUIZ_TEMPERATURE,
+      messages: [
+        { role: 'system', content: QUIZ_SYSTEM + extra },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+    return message.choices[0]?.message?.content ?? '[]';
+  } catch (err) {
+    logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`, { error: String(err) });
+    const message = await openrouter.chat.completions.create({
+      model: FALLBACK_MODEL,
+      max_tokens: 1500,
+      temperature: strictMode ? 0.2 : QUIZ_TEMPERATURE,
+      messages: [
+        { role: 'system', content: QUIZ_SYSTEM + extra },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+    return message.choices[0]?.message?.content ?? '[]';
+  }
 }
 
 export async function generateQuiz(

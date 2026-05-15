@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { logger } from '../../utils/logger';
 
 // OpenRouter is OpenAI-API compatible — just swap baseURL + API key
 export const openrouter = new OpenAI({
@@ -18,3 +19,33 @@ export const GENERATION_TEMPERATURE = 0.3;
 export const CHAT_TEMPERATURE = 0.1;
 export const MODULE_CHAT_TEMPERATURE = 0.3;
 export const QUIZ_TEMPERATURE = 0.5;
+
+export async function createCompletionWithFallback(
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  try {
+    return await openrouter.chat.completions.create(params);
+  } catch (err: unknown) {
+    const status = (err as { statusCode?: number; status?: number }).statusCode ?? (err as { status?: number }).status;
+    if ((status === 429 || (typeof status === 'number' && status >= 500)) && params.model !== FALLBACK_MODEL) {
+      logger.warn(`Primary model ${params.model} failed (${status}), falling back to ${FALLBACK_MODEL}`);
+      return openrouter.chat.completions.create({ ...params, model: FALLBACK_MODEL });
+    }
+    throw err;
+  }
+}
+
+export async function createStreamWithFallback(
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
+): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
+  try {
+    return await openrouter.chat.completions.create(params);
+  } catch (err: unknown) {
+    const status = (err as { statusCode?: number; status?: number }).statusCode ?? (err as { status?: number }).status;
+    if ((status === 429 || (typeof status === 'number' && status >= 500)) && params.model !== FALLBACK_MODEL) {
+      logger.warn(`Primary model ${params.model} failed (${status}), falling back to ${FALLBACK_MODEL}`);
+      return openrouter.chat.completions.create({ ...params, model: FALLBACK_MODEL });
+    }
+    throw err;
+  }
+}

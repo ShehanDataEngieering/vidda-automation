@@ -1,6 +1,7 @@
 import { filterPII } from '../piiFilter';
 import type { SearchResult, RoleProfile } from '../../types';
-import { openrouter, DEFAULT_MODEL, GENERATION_TEMPERATURE } from './openrouter';
+import { openrouter, DEFAULT_MODEL, GENERATION_TEMPERATURE, FALLBACK_MODEL } from './openrouter';
+import { logger } from '../../utils/logger';
 
 const SYSTEM_PROMPT = `You are a senior regulatory compliance training author working for a licensed Nordic financial institution. Your sole purpose is to produce internal staff education materials that help employees understand, detect, and comply with financial regulations — thereby PREVENTING regulatory breaches and financial crime.
 
@@ -93,16 +94,31 @@ ${chunksContext}${rejectionBlock}
 
 Write the training module now. Frame all content from the perspective of what staff must do to comply. Every factual claim must be traceable to the source excerpts above.`;
 
-  const stream = await openrouter.chat.completions.create({
-    model: DEFAULT_MODEL,
-    max_tokens: 2500,
-    temperature: GENERATION_TEMPERATURE,
-    stream: true,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-  });
+  let stream: AsyncIterable<any>;
+  try {
+    stream = await openrouter.chat.completions.create({
+      model: DEFAULT_MODEL,
+      max_tokens: 2500,
+      temperature: GENERATION_TEMPERATURE,
+      stream: true,
+      messages: [
+        { role: 'system' as const, content: SYSTEM_PROMPT },
+        { role: 'user' as const, content: userPrompt },
+      ],
+    });
+  } catch (err) {
+    logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`, { error: String(err) });
+    stream = await openrouter.chat.completions.create({
+      model: FALLBACK_MODEL,
+      max_tokens: 2500,
+      temperature: GENERATION_TEMPERATURE,
+      stream: true,
+      messages: [
+        { role: 'system' as const, content: SYSTEM_PROMPT },
+        { role: 'user' as const, content: userPrompt },
+      ],
+    });
+  }
 
   for await (const chunk of stream) {
     const text = chunk.choices[0]?.delta?.content;

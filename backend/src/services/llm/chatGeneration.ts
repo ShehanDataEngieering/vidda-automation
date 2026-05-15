@@ -1,6 +1,7 @@
 import { filterPII } from '../piiFilter';
 import type { DocSearchResult } from '../rag/documentSearch';
-import { openrouter, DEFAULT_MODEL, CHAT_TEMPERATURE } from './openrouter';
+import { openrouter, DEFAULT_MODEL, CHAT_TEMPERATURE, FALLBACK_MODEL } from './openrouter';
+import { logger } from '../../utils/logger';
 
 export interface ChatCitation {
   documentName: string;
@@ -53,13 +54,25 @@ export async function* streamChatAnswer(
     { role: 'user' as const, content: userContent },
   ];
 
-  const stream = await openrouter.chat.completions.create({
-    model: DEFAULT_MODEL,
-    max_tokens: 500,
-    temperature: CHAT_TEMPERATURE,
-    stream: true,
-    messages,
-  });
+  let stream: AsyncIterable<any>;
+  try {
+    stream = await openrouter.chat.completions.create({
+      model: DEFAULT_MODEL,
+      max_tokens: 500,
+      temperature: CHAT_TEMPERATURE,
+      stream: true,
+      messages,
+    });
+  } catch (err) {
+    logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`, { error: String(err) });
+    stream = await openrouter.chat.completions.create({
+      model: FALLBACK_MODEL,
+      max_tokens: 500,
+      temperature: CHAT_TEMPERATURE,
+      stream: true,
+      messages,
+    });
+  }
 
   for await (const chunk of stream) {
     const text = chunk.choices[0]?.delta?.content;
