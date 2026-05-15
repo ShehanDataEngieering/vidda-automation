@@ -48,7 +48,7 @@ export async function searchDocumentChunks(
   companyId: string,
   topK = 5,
 ): Promise<DocSearchResult[]> {
-  const sanitised = query.replace(/[^\w\s]/g, ' ').trim();
+  const sanitised = query.replace(/[^\w\s\-\/()]/g, ' ').trim();
   const tsQuery = sanitised.split(/\s+/).filter(Boolean).join(' & ');
 
   // ── BM25 on child chunks ──────────────────────────────────────────────────
