@@ -59,6 +59,13 @@ export default function Onboarding({ onCompanyCreated }: Props) {
       });
       if (!res.ok) throw new Error();
       const { companyId } = await res.json() as { companyId: string };
+
+      // Persist admin role in Clerk metadata so it survives page reloads
+      await api('/api/auth/set-company', {
+        method: 'POST',
+        body: JSON.stringify({ companyId, role: 'admin' }),
+      });
+
       onCompanyCreated(companyId);
     } catch {
       setError('Something went wrong. Is the backend running?');

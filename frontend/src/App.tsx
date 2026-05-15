@@ -48,12 +48,14 @@ function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children
 
 function AuthedApp() {
   const { user } = useUser();
-  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
+  const clerkCompanyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
+  const clerkRole = user?.publicMetadata?.role as 'admin' | 'employee' | undefined;
+  // New users without any metadata are setting up — treat as admin for onboarding.
+  // Users with a companyId but no role default to employee (least privilege).
+  const role = clerkRole ?? (clerkCompanyId ? 'employee' : 'admin');
 
   const [screen, setScreen] = useState<Screen>(role === 'admin' ? 'onboarding' : 'chat');
-  const [companyId, setCompanyId] = useState<string>(
-    (user?.publicMetadata?.companyId as string | undefined) ?? '',
-  );
+  const [companyId, setCompanyId] = useState<string>(clerkCompanyId);
   const [activeCourseModule, setActiveCourseModule] = useState<TrainingModuleWithProgress | null>(null);
 
   return (
