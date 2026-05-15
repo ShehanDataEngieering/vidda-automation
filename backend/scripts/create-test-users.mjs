@@ -2,23 +2,19 @@
  * Creates test admin and employee users via the Clerk API.
  *
  * Usage:
- *   1. Create a company first through the app (Onboarding page) to get a real companyId,
- *      OR use a placeholder UUID and update later.
- *   2. Set COMPANY_ID below.
- *   3. Run: node scripts/create-test-users.mjs
+ *   # Create admin (no companyId needed - will be set during onboarding)
+ *   node scripts/create-test-users.mjs
+ *
+ *   # Create employee (requires a companyId from an already-onboarded admin)
+ *   node scripts/create-test-users.mjs <COMPANY_ID>
  */
 import { createClerkClient } from '@clerk/backend';
 
 const SECRET_KEY = process.env.CLERK_SECRET_KEY;
-const COMPANY_ID = process.argv[2] ?? '';
+const COMPANY_ID = process.argv[2] ?? null;
 
 if (!SECRET_KEY) {
   console.error('CLERK_SECRET_KEY must be set in backend/.env');
-  process.exit(1);
-}
-if (!COMPANY_ID) {
-  console.error('Usage: node scripts/create-test-users.mjs <COMPANY_ID>');
-  console.error('  Get a real companyId by creating a company via the Onboarding page first.');
   process.exit(1);
 }
 
@@ -27,37 +23,35 @@ const client = createClerkClient({ secretKey: SECRET_KEY });
 async function main() {
   try {
     const admin = await client.users.createUser({
-      emailAddress: ['admin@vidda-test.local'],
+      emailAddress: ['admin@test.vidda.dev'],
       firstName: 'Admin',
       lastName: 'Demo',
-      password: 'TestPass123!',
-      publicMetadata: {
-        companyId: COMPANY_ID,
-        role: 'admin',
-        employeeRole: null,
-      },
-    });
-    console.log(`[OK] Admin created:  ${admin.emailAddresses?.[0]?.emailAddress}  (${admin.id})`);
-
-    const employee = await client.users.createUser({
-      emailAddress: ['employee@vidda-test.local'],
-      firstName: 'Employee',
-      lastName: 'Demo',
-      password: 'TestPass123!',
-      publicMetadata: {
-        companyId: COMPANY_ID,
-        role: 'employee',
-        employeeRole: 'Compliance',
-      },
-    });
-    console.log(`[OK] Employee created: ${employee.emailAddresses?.[0]?.emailAddress}  (${employee.id})`);
+        password: 'AdminVidda2024!',
+        publicMetadata: {
+          companyId: COMPANY_ID,
+          role: 'employee',
+          employeeRole: 'Compliance',
+        },
+      });
+      console.log(`[OK] Employee: ${employee.emailAddresses?.[0]?.emailAddress}  (${employee.id})`);
+      console.log('         role=employee  companyId=' + COMPANY_ID + '  dept=Compliance');
+    }
 
     console.log('\nCredentials:');
-    console.log('  admin@vidda-test.local    / TestPass123!    (role: admin)');
-    console.log('  employee@vidda-test.local / TestPass123!    (role: employee, dept: Compliance)');
+    console.log('  admin@test.vidda.dev     / AdminVidda2024!   (role: admin)');
+    if (COMPANY_ID) {
+      console.log('  employee@test.vidda.dev  / AdminVidda2024!   (role: employee)');
+    } else {
+      console.log('\n  Run again with companyId to create employee:');
+      console.log('  node scripts/create-test-users.mjs <COMPANY_ID>');
+    }
   } catch (err) {
-    console.error('Failed:', err.message ?? err);
-    process.exit(1);
+    if (err.message?.includes('already exists') || err.errors?.[0]?.code === 'form_identifier_exists') {
+      console.log('[SKIP] User already exists.');
+    } else {
+      console.error('Failed:', err.message ?? err);
+      process.exit(1);
+    }
   }
 }
 

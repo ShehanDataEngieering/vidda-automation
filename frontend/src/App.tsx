@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
-import { Shield, ShieldOff } from 'lucide-react';
+import { SignIn, useUser, useClerk, ClerkLoaded } from '@clerk/react';
+import { Shield, ShieldOff, LogOut } from 'lucide-react';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Button } from '@/components/ui/button';
 import NavBar from './components/NavBar';
 import Onboarding from './screens/Onboarding';
 import Generation from './screens/Generation';
@@ -19,14 +20,33 @@ type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'document
 type EmployeeScreen = 'chat' | 'training' | 'course';
 type Screen = AdminScreen | EmployeeScreen;
 
-function AccessDenied() {
+function NotAuthorized() {
+  const { signOut } = useClerk();
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center space-y-4 max-w-md p-6">
         <ShieldOff className="h-12 w-12 text-destructive mx-auto" />
         <h1 className="text-lg font-semibold">Access Denied</h1>
         <p className="text-sm text-muted-foreground">
-          You do not have permission to view this page. Contact your administrator if you believe this is an error.
+          This application is restricted to authorised personnel only.
+          Contact your administrator if you believe this is an error.
+        </p>
+        <Button variant="outline" onClick={() => signOut(() => {})}>
+          <LogOut className="h-4 w-4 mr-2" />Sign out
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AccessDeniedPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center space-y-4 max-w-md p-6">
+        <ShieldOff className="h-12 w-12 text-destructive mx-auto" />
+        <h1 className="text-lg font-semibold">Access Denied</h1>
+        <p className="text-sm text-muted-foreground">
+          You do not have permission to view this page.
         </p>
       </div>
     </div>
@@ -34,7 +54,7 @@ function AccessDenied() {
 }
 
 function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
-  if (role !== allowed) return <AccessDenied />;
+  if (role !== allowed) return <AccessDeniedPage />;
   return <>{children}</>;
 }
 
@@ -49,10 +69,7 @@ function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children
 function AuthedApp() {
   const { user } = useUser();
   const clerkCompanyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
-  const clerkRole = user?.publicMetadata?.role as 'admin' | 'employee' | undefined;
-  // New users without any metadata are setting up — treat as admin for onboarding.
-  // Users with a companyId but no role default to employee (least privilege).
-  const role = clerkRole ?? (clerkCompanyId ? 'employee' : 'admin');
+  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'admin';
 
   const [screen, setScreen] = useState<Screen>(role === 'admin' ? 'onboarding' : 'chat');
   const [companyId, setCompanyId] = useState<string>(clerkCompanyId);
@@ -115,20 +132,33 @@ function LoginPage() {
           <h1 className="text-xl font-semibold">Vidda Compliance</h1>
           <p className="text-sm text-muted-foreground">Sign in to your account</p>
         </div>
-        <SignIn />
+        <SignIn
+          appearance={{
+            elements: {
+              footerAction: { display: 'none' },
+              footer: { display: 'none' },
+            },
+          }}
+        />
       </div>
     </div>
   );
 }
 
 function AppInner() {
-  const { isSignedIn, isLoaded } = useUser();
+  const { user, isSignedIn, isLoaded } = useUser();
   if (!isLoaded) return (
     <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
       Loading…
     </div>
   );
-  return isSignedIn ? <ErrorBoundary><AuthedApp /></ErrorBoundary> : <LoginPage />;
+
+  if (!isSignedIn) return <LoginPage />;
+
+  const role = user?.publicMetadata?.role;
+  if (role !== 'admin') return <NotAuthorized />;
+
+  return <ErrorBoundary><AuthedApp /></ErrorBoundary>;
 }
 
 export default function App() {
