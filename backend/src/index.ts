@@ -4,11 +4,8 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { clerkMiddleware } from './middleware/auth';
 import { companyRouter } from './routes/company';
-import { generateRouter } from './routes/generate';
-import { modulesRouter } from './routes/modules';
 import { authRouter } from './routes/auth';
 import { documentsRouter } from './routes/documents';
-import { chatRouter } from './routes/chat';
 import { trainingRouter } from './routes/training';
 import { usersRouter } from './routes/users';
 import { pipelineRouter } from './routes/pipeline';
@@ -41,15 +38,10 @@ app.get('/health', (_req, res) => {
 // Clerk session parsing
 app.use(clerkMiddleware());
 
-// V2 admin pipeline
+// Routes
 app.use('/api/company', companyRouter);
-app.use('/api/generate', generateRouter);
-app.use('/api/modules', modulesRouter);
-
-// V3
 app.use('/api/auth', authRouter);
 app.use('/api/documents', documentsRouter);
-app.use('/api/chat', chatRouter);
 app.use('/api/training', trainingRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/pipeline', pipelineRouter);
@@ -63,6 +55,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(PORT, () => {
   logger.info(`Vidda backend started`, { port: PORT, env: process.env.NODE_ENV ?? 'development' });
   logger.info('Routes mounted', {
-    routes: ['/health', '/api/company', '/api/generate', '/api/modules', '/api/auth', '/api/documents', '/api/chat', '/api/training', '/api/users', '/api/pipeline'],
+    routes: ['/health', '/api/company', '/api/auth', '/api/documents', '/api/training', '/api/users', '/api/pipeline'],
   });
 });

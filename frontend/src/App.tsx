@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
 import { Shield } from 'lucide-react';
@@ -6,12 +6,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import NavBar from './components/NavBar';
 import Onboarding from './screens/Onboarding';
-import Generation from './screens/Generation';
-import ReviewDashboard from './screens/ReviewDashboard';
-import FinalOutput from './screens/FinalOutput';
 import DocumentManager from './screens/DocumentManager';
-import ComplianceChat from './screens/ComplianceChat';
-import TrainingDashboard from './screens/TrainingDashboard';
 import UserManagement from './screens/UserManagement';
 import PipelinePage from './screens/PipelinePage';
 import RoleImport from './screens/RoleImport';
@@ -37,10 +32,7 @@ function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children
 
 function AuthedApp() {
   const { user } = useUser();
-  const clerkCompanyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
   const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
-
-  const [companyId, setCompanyId] = useState<string>(clerkCompanyId);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -63,22 +55,13 @@ function AuthedApp() {
           <Route path="/pipeline/:planId/plan" element={<AdminGate role={role}><TrainingPlan /></AdminGate>} />
           <Route path="/pipeline/:planId/lms" element={<AdminGate role={role}><LMSView /></AdminGate>} />
 
-          {/* Employee routes */}
+          {/* Employee LMS */}
           <Route path="/lms/my-training" element={<EmployeeGate role={role}><LMSDashboard /></EmployeeGate>} />
 
-          {/* Old screens — keep working during transition */}
-          <Route path="/setup" element={<AdminGate role={role}>
-            <Onboarding onCompanyCreated={(id) => { setCompanyId(id); }} />
-          </AdminGate>} />
-          <Route path="/generate" element={companyId ? <Generation companyId={companyId} onComplete={() => {}} /> : <Navigate to="/setup" />} />
-          <Route path="/review" element={companyId ? <ReviewDashboard companyId={companyId} onFinish={() => {}} /> : <Navigate to="/setup" />} />
-          <Route path="/output" element={companyId ? <FinalOutput companyId={companyId} /> : <Navigate to="/setup" />} />
+          {/* Utility screens */}
+          <Route path="/setup" element={<AdminGate role={role}><Onboarding onCompanyCreated={() => {}} /></AdminGate>} />
           <Route path="/documents" element={<AdminGate role={role}><DocumentManager /></AdminGate>} />
           <Route path="/users" element={<AdminGate role={role}><UserManagement /></AdminGate>} />
-
-          {/* Employee routes */}
-          <Route path="/chat" element={<EmployeeGate role={role}><ComplianceChat /></EmployeeGate>} />
-          <Route path="/training" element={<EmployeeGate role={role}><TrainingDashboard /></EmployeeGate>} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />

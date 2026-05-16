@@ -1,8 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { UserButton } from '@clerk/react';
 import {
-  Building2, FileText, Shield, CheckSquare, Upload,
-  MessageSquare, BookOpen, ChevronRight, Users, Target, type LucideIcon
+  Building2, Shield, Upload, BookOpen, ChevronRight, Users, Target, type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -15,21 +14,17 @@ interface NavItem {
   path: string;
 }
 
-// Admin navigation — old screens + new pipeline
+// Admin navigation — pipeline + utility screens
 const adminNav: NavItem[] = [
   { id: 'pipeline',   label: 'Pipeline',        icon: Target,      path: '/pipeline' },
   { id: 'setup',      label: 'Company Setup',    icon: Building2,   path: '/setup' },
-  { id: 'generate',   label: 'Modules',          icon: FileText,    path: '/generate' },
-  { id: 'review',     label: 'Review',           icon: CheckSquare, path: '/review' },
-  { id: 'output',     label: 'Final Output',     icon: Shield,      path: '/output' },
   { id: 'documents',  label: 'Documents',        icon: Upload,      path: '/documents' },
   { id: 'users',      label: 'Team',             icon: Users,       path: '/users' },
 ];
 
-// Employee navigation
+// Employee navigation — LMS training view
 const employeeNav: NavItem[] = [
-  { id: 'chat',       label: 'Compliance Chat',  icon: MessageSquare, path: '/chat' },
-  { id: 'training',   label: 'My Training',      icon: BookOpen,      path: '/training' },
+  { id: 'training',   label: 'My Training',      icon: BookOpen,      path: '/lms/my-training' },
 ];
 
 export default function NavBar({ role }: { role: 'admin' | 'employee' }) {
