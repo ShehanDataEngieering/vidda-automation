@@ -4,3 +4,11 @@ dist/
 *.js.map
 *.d.ts.map
 backend/src/db/pdfs/
+
+# Generated analysis / review artifacts
+CODE_QUALITY_ANALYSIS.md
+CODE_QUALITY_INDEX.md
+CODE_QUALITY_SUMMARY.txt
+QUICK_FIXES.md
+vidda_master_brief.html
+vidda_master_brief.html:Zone.Identifier
