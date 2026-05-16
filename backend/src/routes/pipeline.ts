@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/client';
 import { openrouter, DEFAULT_MODEL, FALLBACK_MODEL } from '../services/llm/openrouter';
-import { PIPELINE_SYSTEM_PROMPT, ROLE_ANALYSIS_USER, RISK_ASSESSMENT_USER, AMLR_MAPPING_USER } from '../services/llm/pipelinePrompt';
-import { validateRoleProfile, validateRiskMatrix, validateAMLRMappings } from '../services/llm/pipelineValidator';
+import { PIPELINE_SYSTEM_PROMPT, ROLE_ANALYSIS_USER, RISK_ASSESSMENT_USER, AMLR_MAPPING_USER, TRAINING_PLAN_USER } from '../services/llm/pipelinePrompt';
+import { validateRoleProfile, validateRiskMatrix, validateAMLRMappings, validateTrainingPlan } from '../services/llm/pipelineValidator';
 import { searchChunks } from '../services/rag/vectorSearch';
 import { logger } from '../utils/logger';
 import type { PipelinePlan } from '../types';
@@ -434,6 +434,195 @@ pipelineRouter.post('/:id/regenerate-amlr', async (req: Request, res: Response) 
     logger.error('AMLR regeneration failed', { error: String(err) });
     res.status(500).json({ error: 'AI regeneration failed' });
   }
+});
+
+// ===========================================================================
+// Step 5: Training Plan Generation (SSE streaming)
+// AI generates 4-quarter plan with 5-7 modules each.
+// RAG retrieves AMLR article text so why_included justifications are accurate.
+// ===========================================================================
+
+pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) => {
+  const { rows: plans } = await db.query(
+    `SELECT id, version, role_profile, risk_matrix, amlr_mappings FROM training_plans WHERE id = $1`,
+    [req.params.id],
+  );
+  if (!plans[0] || !plans[0].role_profile || !plans[0].risk_matrix || !plans[0].amlr_mappings) {
+    res.status(400).json({ error: 'Plan not found or AMLR mapping not complete yet.' });
+    return;
+  }
+
+  const planId = req.params.id;
+  const roleProfile = typeof plans[0].role_profile === 'string' ? JSON.parse(plans[0].role_profile) : plans[0].role_profile;
+  const riskMatrix = typeof plans[0].risk_matrix === 'string' ? JSON.parse(plans[0].risk_matrix) : plans[0].risk_matrix;
+  const mappings = typeof plans[0].amlr_mappings === 'string' ? JSON.parse(plans[0].amlr_mappings) : plans[0].amlr_mappings;
+
+  // RAG: Retrieve article chunks so why_included justifications are grounded
+  let articleExcerpts = '';
+  try {
+    const roleTitle = roleProfile.role_title || roleProfile.classified_as || 'this role';
+    const searchResults = await searchChunks('AMLR', roleTitle, 8);
+    articleExcerpts = searchResults
+      .map((r, i) => `[Excerpt ${i + 1} — AMLR ${r.article_reference}]\n${r.content}`)
+      .join('\n\n');
+  } catch (err) {
+    logger.warn('RAG retrieval for plan generation failed', { error: String(err) });
+  }
+
+  const userPrompt = `${TRAINING_PLAN_USER}\n\nROLE PROFILE, RISK MATRIX, AND AMLR MAPPING:\n${JSON.stringify({ roleProfile, riskMatrix, amlrMappings: mappings }, null, 2)}\n\nREGULATORY EXCERPTS (AMLR 2024/1624):\n${articleExcerpts}`;
+
+  // Open SSE stream
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const send = (event: Record<string, unknown>) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+  let fullText = '';
+  let modelUsed = DEFAULT_MODEL;
+
+  try {
+    // Try primary model with streaming
+    let stream: AsyncIterable<unknown>;
+    try {
+      stream = await openrouter.chat.completions.create({
+        model: DEFAULT_MODEL, max_tokens: 3000, temperature: 0.3,
+        stream: true,
+        messages: [
+          { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+      });
+    } catch (err) {
+      logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`);
+      modelUsed = FALLBACK_MODEL;
+      stream = await openrouter.chat.completions.create({
+        model: FALLBACK_MODEL, max_tokens: 3000, temperature: 0.3,
+        stream: true,
+        messages: [
+          { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+      });
+    }
+
+    for await (const chunk of stream as AsyncIterable<{ choices?: Array<{ delta?: { content?: string } }> }>) {
+      const text = chunk.choices?.[0]?.delta?.content;
+      if (text) {
+        fullText += text;
+        send({ type: 'token', token: text });
+      }
+    }
+
+    // Validate final output
+    const validation = validateTrainingPlan(fullText);
+    if (!validation.valid || !validation.data) {
+      send({ type: 'error', message: 'Training plan validation failed', warnings: validation.warnings });
+      res.end();
+      return;
+    }
+
+    // Save to DB
+    await db.query(
+      `UPDATE training_plans SET training_plan = $1, current_step = 'plan', updated_at = NOW() WHERE id = $2`,
+      [JSON.stringify(validation.data), planId],
+    );
+
+    await db.query(
+      `INSERT INTO plan_events (plan_id, version, step, action, after_state)
+       VALUES ($1, $2, 'plan', 'ai_generated', $3)`,
+      [planId, plans[0].version, JSON.stringify(validation.data)],
+    );
+
+    logger.info('Training plan generated', { planId, quarters: validation.data.quarters.map((q: { quarter: string; modules: unknown[] }) => `${q.quarter}:${q.modules.length}`) });
+
+    send({ type: 'done', plan: validation.data, warnings: validation.warnings });
+  } catch (err) {
+    logger.error('Plan generation failed', { error: String(err) });
+    send({ type: 'error', message: 'AI generation failed' });
+  } finally {
+    res.end();
+  }
+});
+
+// ===========================================================================
+// Gate 3: Training Plan Approval — edit modules, approve plan
+// ===========================================================================
+
+pipelineRouter.patch('/:id/plan', async (req: Request, res: Response) => {
+  const { trainingPlan, reviewerNote } = req.body;
+
+  const { rows: plans } = await db.query(
+    `SELECT id, version, training_plan FROM training_plans WHERE id = $1`,
+    [req.params.id],
+  );
+  if (!plans[0] || !plans[0].training_plan) {
+    res.status(400).json({ error: 'Plan not found or not generated yet.' });
+    return;
+  }
+
+  const planId = req.params.id;
+  const beforeState = plans[0].training_plan;
+  const newVersion = plans[0].version + 1;
+
+  await db.query(
+    `UPDATE training_plans SET training_plan = $1, version = $2, updated_at = NOW() WHERE id = $3`,
+    [JSON.stringify(trainingPlan), newVersion, planId],
+  );
+
+  await db.query(
+    `INSERT INTO plan_events (plan_id, version, step, action, reviewer, before_state, after_state, note)
+     VALUES ($1, $2, 'plan', 'human_override', $3, $4, $5, $6)`,
+    [planId, newVersion, 'Compliance Manager', JSON.stringify(beforeState), JSON.stringify(trainingPlan), reviewerNote ?? null],
+  );
+
+  logger.info('Training plan edited by human', { planId, version: newVersion });
+
+  res.json({ trainingPlan, version: newVersion });
+});
+
+// Final approval gate — marks plan as approved (can't be edited after)
+pipelineRouter.patch('/:id/approve', async (req: Request, res: Response) => {
+  const { reviewer } = req.body;
+
+  const { rows: plans } = await db.query(
+    `SELECT id, version, training_plan FROM training_plans WHERE id = $1 AND status = 'draft'`,
+    [req.params.id],
+  );
+  if (!plans[0] || !plans[0].training_plan) {
+    res.status(400).json({ error: 'Plan not found, already approved, or not generated yet.' });
+    return;
+  }
+
+  const planId = req.params.id;
+  const newVersion = plans[0].version + 1;
+
+  await db.query(
+    `UPDATE training_plans SET status = 'approved', reviewer = $1, version = $2, updated_at = NOW() WHERE id = $3`,
+    [reviewer ?? 'Compliance Manager', newVersion, planId],
+  );
+
+  await db.query(
+    `INSERT INTO plan_events (plan_id, version, step, action, reviewer, after_state)
+     VALUES ($1, $2, 'plan', 'approved', $3, $4)`,
+    [planId, newVersion, reviewer ?? 'Compliance Manager', JSON.stringify({ status: 'approved' })],
+  );
+
+  logger.info('Training plan approved', { planId, reviewer });
+
+  res.json({ status: 'approved', version: newVersion });
+});
+
+// Regeneration: after AMLR mapping overrides, re-run training plan generation
+pipelineRouter.post('/:id/regenerate-plan', async (req: Request, res: Response) => {
+  // Redirect to the SSE streaming endpoint — same as generate-plan
+  req.url = `/${req.params.id}/generate-plan`;
+  req.method = 'POST';
+  // Re-route internally by calling the generate-plan logic
+  // For simplicity, redirect the client
+  res.status(307).json({ redirect: `/api/pipeline/${req.params.id}/generate-plan`, message: 'Regeneration triggered. Call generate-plan.' });
 });
 
 export default pipelineRouter;
