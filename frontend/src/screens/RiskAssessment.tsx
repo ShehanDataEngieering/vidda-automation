@@ -121,6 +121,7 @@ export default function RiskAssessment() {
   }
 
   const riskMatrix: RiskDimensionScore[] = plan.risk_matrix ?? [];
+  const hasRiskMatrix = plan.risk_matrix !== null && plan.risk_matrix !== undefined;
   const roleProfile = plan.role_profile as { role_title: string; classified_as: string };
   const hasOverrides = Object.keys(overrides).length > 0;
 
@@ -137,7 +138,7 @@ export default function RiskAssessment() {
       </div>
 
       {/* Assess button — shown when no risk matrix yet */}
-      {!riskMatrix && (
+      {!hasRiskMatrix && (
         <Card className="mb-6">
           <CardContent className="pt-6 text-center">
             <p className="text-sm text-muted-foreground mb-4">
@@ -169,7 +170,7 @@ export default function RiskAssessment() {
       )}
 
       {/* Risk Matrix — 5 dimension cards */}
-      {riskMatrix && (
+      {hasRiskMatrix && (
         <>
           <div className="grid grid-cols-1 gap-3 mb-6">
             {riskMatrix.map((dim) => {
