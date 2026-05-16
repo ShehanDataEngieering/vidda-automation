@@ -334,14 +334,14 @@ async function executeAMLRMapping(planId: string): Promise<{ mappings: unknown[]
   const userPrompt = `${AMLR_MAPPING_USER}\n\nROLE PROFILE AND RISK MATRIX:\n${JSON.stringify(roleProfile, null, 2)}\n${JSON.stringify(plans[0].risk_matrix, null, 2)}\n\nREGULATORY EXCERPTS (AMLR 2024/1624):\n${articleExcerpts}`;
 
   // Phase 1: AI call with fallback
-  let rawOutput = await callAIWithRetry(PIPELINE_SYSTEM_PROMPT, userPrompt, 1000, 0.1);
+  let rawOutput = await callAIWithRetry(PIPELINE_SYSTEM_PROMPT, userPrompt, 3000, 0.1);
 
   // Phase 2: Validate + retry
   let validation = validateAMLRMappings(rawOutput);
   if (!validation.valid) {
     logger.warn('AMLR mapping first attempt invalid, retrying');
     const retryPrompt = PIPELINE_SYSTEM_PROMPT + '\n\nCRITICAL: Output ONLY the JSON array. Only use AMLR Articles 9-15. No markdown.';
-    const retryOutput = await callAIWithRetry(retryPrompt, userPrompt, 1000, 0.0);
+    const retryOutput = await callAIWithRetry(retryPrompt, userPrompt, 3000, 0.0);
     validation = validateAMLRMappings(retryOutput);
   }
 
@@ -487,8 +487,8 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
     // Try primary model with streaming
     let stream: AsyncIterable<unknown>;
     try {
-      stream = await openrouter.chat.completions.create({
-        model: DEFAULT_MODEL, max_tokens: 3000, temperature: 0.3,
+        stream = await openrouter.chat.completions.create({
+        model: DEFAULT_MODEL, max_tokens: 5000, temperature: 0.3,
         stream: true,
         messages: [
           { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
@@ -499,7 +499,7 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
       logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`);
       modelUsed = FALLBACK_MODEL;
       stream = await openrouter.chat.completions.create({
-        model: FALLBACK_MODEL, max_tokens: 3000, temperature: 0.3,
+        model: FALLBACK_MODEL, max_tokens: 5000, temperature: 0.3,
         stream: true,
         messages: [
           { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
