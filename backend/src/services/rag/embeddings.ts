@@ -1,5 +1,6 @@
 import { VoyageAIClient } from 'voyageai';
 import { logger } from '../../utils/logger';
+import * as embedCache from './embeddingCache';
 
 // Lazy init — client created on first call so dotenv has already run
 let _client: VoyageAIClient | null = null;
@@ -8,22 +9,27 @@ const getClient = () => {
   return _client;
 };
 const MODEL = 'voyage-finance-2';
-// Free tier: 3 RPM / 10K TPM. Paid tier: much higher.
-// BATCH_SIZE=20 keeps each request ~2K tokens; BATCH_DELAY=22s = 2.7 RPM (safe for free tier).
-// Override via env for paid accounts: EMBED_BATCH_SIZE=100 EMBED_BATCH_DELAY_MS=500
+const EMBED_DIM = 1024;
 const BATCH_SIZE = Number(process.env.EMBED_BATCH_SIZE ?? 20);
 const BATCH_DELAY_MS = Number(process.env.EMBED_BATCH_DELAY_MS ?? 22000);
 
 async function embedBatch(batch: string[], attempt = 1): Promise<number[][]> {
   try {
     const res = await getClient().embed({ input: batch, model: MODEL });
-    return (res.data ?? []).map((d: { embedding?: number[] }) => d.embedding ?? []);
+    const embedData = (res.data ?? []) as Array<{ embedding?: number[] }>;
+    const vecs = embedData.map((d) => {
+      const vec = d.embedding ?? [];
+      if (vec.length > 0 && vec.length !== EMBED_DIM) {
+        logger.warn('Embedding dimension mismatch', { expected: EMBED_DIM, got: vec.length });
+      }
+      return vec;
+    });
+    return vecs;
   } catch (err: unknown) {
-    const status = (err as { statusCode?: number }).statusCode;
-    if (status === 429 && attempt <= 5) {
-      // 3 RPM free tier: wait 65s to fully reset the sliding window
-      const wait = 65_000;
-      logger.warn(`Rate limited (429) attempt ${attempt}/5 — waiting ${wait / 1000}s for window reset...`);
+    const status = (err as { statusCode?: number; status?: number }).statusCode ?? (err as { status?: number }).status;
+    if ((status === 429 || (status !== undefined && status >= 500)) && attempt <= 5) {
+      const wait = status === 429 ? 65_000 : Math.min(attempt * 5000, 30_000);
+      logger.warn(`Embed batch error (${status}) attempt ${attempt}/5 — waiting ${wait / 1000}s...`);
       await new Promise(r => setTimeout(r, wait));
       return embedBatch(batch, attempt + 1);
     }
@@ -33,15 +39,35 @@ async function embedBatch(batch: string[], attempt = 1): Promise<number[][]> {
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const results: number[][] = [];
-  const totalBatches = Math.ceil(texts.length / BATCH_SIZE);
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE);
+
+  const results: number[][] = new Array(texts.length);
+  const uncachedIndices: number[] = [];
+  const uncachedTexts: string[] = [];
+
+  for (let i = 0; i < texts.length; i++) {
+    const cached = embedCache.getCachedEmbedding(texts[i]!);
+    if (cached) {
+      results[i] = cached;
+    } else {
+      uncachedIndices.push(i);
+      uncachedTexts.push(texts[i]!);
+    }
+  }
+
+  if (uncachedTexts.length === 0) return results;
+
+  const totalBatches = Math.ceil(uncachedTexts.length / BATCH_SIZE);
+  for (let i = 0; i < uncachedTexts.length; i += BATCH_SIZE) {
+    const batch = uncachedTexts.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    logger.debug(`Embedding batch ${batchNum}/${totalBatches}`, { count: batch.length });
+    logger.debug(`Embedding batch ${batchNum}/${totalBatches}`, { count: batch.length, cacheHits: texts.length - uncachedTexts.length });
     const vecs = await embedBatch(batch);
-    results.push(...vecs);
-    if (i + BATCH_SIZE < texts.length) await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+    for (let j = 0; j < vecs.length; j++) {
+      const origIdx = uncachedIndices[i + j]!;
+      results[origIdx] = vecs[j]!;
+      embedCache.setCachedEmbedding(uncachedTexts[j]!, vecs[j]!);
+    }
+    if (i + BATCH_SIZE < uncachedTexts.length) await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
   }
   return results;
 }

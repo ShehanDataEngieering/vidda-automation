@@ -48,7 +48,7 @@ export async function searchDocumentChunks(
   companyId: string,
   topK = 5,
 ): Promise<DocSearchResult[]> {
-  const sanitised = query.replace(/[^\w\s]/g, ' ').trim();
+  const sanitised = query.replace(/[^\w\s\-\/()]/g, ' ').trim();
   const tsQuery = sanitised.split(/\s+/).filter(Boolean).join(' & ');
 
   // ── BM25 on child chunks ──────────────────────────────────────────────────
@@ -184,5 +184,5 @@ export async function searchDocumentChunks(
 
   logger.debug('documentSearch done', { query: query.slice(0, 60), bm25Hits, vectorHits, rrfCandidates: allIds.size, parents: parentIds.length, reranked: reranked.length });
 
-  return reranked.map((r, i) => toResult(r, 1 - i * 0.05, parentRowMap.has(r.id))).slice(0, topK + 3);
+  return reranked.map((r) => toResult(r.item, r.score, parentRowMap.has(r.item.id))).slice(0, topK + 3);
 }

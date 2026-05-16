@@ -111,5 +111,5 @@ export async function searchChunks(
 
   logger.debug('vectorSearch done', { regulation, role, bm25Hits, vectorHits, rrfCandidates: allIds.size, reranked: reranked.length });
 
-  return reranked.map((r, i) => toSearchResult(r, 1 - i * 0.05)).slice(0, topK);
+  return reranked.map(r => toSearchResult(r.item, r.score)).slice(0, topK);
 }
