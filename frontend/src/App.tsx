@@ -18,6 +18,8 @@ import RoleImport from './screens/RoleImport';
 import RiskAssessment from './screens/RiskAssessment';
 import AMLRMapping from './screens/AMLRMapping';
 import TrainingPlan from './screens/TrainingPlan';
+import LMSView from './screens/LMSView';
+import LMSDashboard from './screens/LMSDashboard';
 
 // Role gate components — restrict render by Clerk role metadata
 function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
@@ -59,6 +61,10 @@ function AuthedApp() {
           <Route path="/pipeline/:planId/risk" element={<AdminGate role={role}><RiskAssessment /></AdminGate>} />
           <Route path="/pipeline/:planId/amlr" element={<AdminGate role={role}><AMLRMapping /></AdminGate>} />
           <Route path="/pipeline/:planId/plan" element={<AdminGate role={role}><TrainingPlan /></AdminGate>} />
+          <Route path="/pipeline/:planId/lms" element={<AdminGate role={role}><LMSView /></AdminGate>} />
+
+          {/* Employee routes */}
+          <Route path="/lms/my-training" element={<EmployeeGate role={role}><LMSDashboard /></EmployeeGate>} />
 
           {/* Old screens — keep working during transition */}
           <Route path="/setup" element={<AdminGate role={role}>

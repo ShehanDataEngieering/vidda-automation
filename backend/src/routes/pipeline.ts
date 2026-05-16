@@ -625,4 +625,71 @@ pipelineRouter.post('/:id/regenerate-plan', async (req: Request, res: Response) 
   res.status(307).json({ redirect: `/api/pipeline/${req.params.id}/generate-plan`, message: 'Regeneration triggered. Call generate-plan.' });
 });
 
+// ===========================================================================
+// Step 7: LMS Assignment
+// Assign approved training plans to employees with due dates and status tracking
+// ===========================================================================
+
+// Get assignments for a plan
+pipelineRouter.get('/:id/assignments', async (req: Request, res: Response) => {
+  const { rows } = await db.query(
+    `SELECT a.id, a.user_id, a.module_index, a.quarter, a.due_date, a.status, a.completed_at,
+            tp.training_plan
+     FROM plan_assignments a
+     JOIN training_plans tp ON tp.id = a.plan_id
+     WHERE a.plan_id = $1
+     ORDER BY a.quarter, a.module_index`,
+    [req.params.id],
+  );
+  res.json(rows);
+});
+
+// Assign plan to employees
+pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
+  const { userIds, dueDate } = req.body;
+
+  const { rows: plans } = await db.query(
+    `SELECT id, training_plan FROM training_plans WHERE id = $1 AND status = 'approved'`,
+    [req.params.id],
+  );
+  if (!plans[0] || !plans[0].training_plan) {
+    res.status(400).json({ error: 'Plan not found, not approved, or has no training plan.' });
+    return;
+  }
+
+  const planId = req.params.id;
+  const plan = typeof plans[0].training_plan === 'string' ? JSON.parse(plans[0].training_plan) : plans[0].training_plan;
+  const users: string[] = Array.isArray(userIds) ? userIds : [userIds];
+
+  // Create assignments for each user × each module in the plan
+  for (const userId of users) {
+    for (const q of plan.quarters) {
+      for (let mi = 0; mi < q.modules.length; mi++) {
+        await db.query(
+          `INSERT INTO plan_assignments (plan_id, user_id, module_index, quarter, due_date, status)
+           VALUES ($1, $2, $3, $4, $5, 'not_started')
+           ON CONFLICT (plan_id, user_id, module_index, quarter) DO NOTHING`,
+          [planId, userId, mi, q.quarter, dueDate ?? null],
+        );
+      }
+    }
+  }
+
+  logger.info(`Plan assigned to ${users.length} employee(s)`, { planId, modules: plan.quarters.reduce((s: number, q: { modules: unknown[] }) => s + q.modules.length, 0) * users.length });
+
+  res.json({ ok: true, assigned: users.length });
+});
+
+// List approved plans for LMS view
+pipelineRouter.get('/plans/approved', async (req: Request, res: Response) => {
+  const companyId = (req as unknown as { userContext?: { companyId: string } }).userContext?.companyId;
+  let query = `SELECT id, role_title, training_plan, reviewer, updated_at FROM training_plans WHERE status = 'approved'`;
+  const params: string[] = [];
+  if (companyId) { query += ` AND company_id = $1`; params.push(companyId); }
+  query += ` ORDER BY updated_at DESC`;
+
+  const { rows } = await db.query(query, params);
+  res.json(rows);
+});
+
 export default pipelineRouter;
