@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { SignIn, useUser, useClerk, ClerkLoaded } from '@clerk/react';
-import { Shield, ShieldOff, LogOut } from 'lucide-react';
+import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
+import { Shield } from 'lucide-react';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Button } from '@/components/ui/button';
 import NavBar from './components/NavBar';
 import Onboarding from './screens/Onboarding';
 import Generation from './screens/Generation';
@@ -19,25 +18,6 @@ import type { TrainingModuleWithProgress } from './types';
 type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
 type EmployeeScreen = 'chat' | 'training' | 'course';
 type Screen = AdminScreen | EmployeeScreen;
-
-function NotAuthorized() {
-  const { signOut } = useClerk();
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center space-y-4 max-w-md p-6">
-        <ShieldOff className="h-12 w-12 text-destructive mx-auto" />
-        <h1 className="text-lg font-semibold">Access Denied</h1>
-        <p className="text-sm text-muted-foreground">
-          This application is restricted to authorised personnel only.
-          Contact your administrator if you believe this is an error.
-        </p>
-        <Button variant="outline" onClick={() => signOut(() => {})}>
-          <LogOut className="h-4 w-4 mr-2" />Sign out
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
   if (role !== allowed) return null;
@@ -55,7 +35,7 @@ function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children
 function AuthedApp() {
   const { user } = useUser();
   const clerkCompanyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
-  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'admin';
+  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
 
   const [screen, setScreen] = useState<Screen>(role === 'admin' ? 'onboarding' : 'chat');
   const [companyId, setCompanyId] = useState<string>(clerkCompanyId);
@@ -132,7 +112,7 @@ function LoginPage() {
 }
 
 function AppInner() {
-  const { user, isSignedIn, isLoaded } = useUser();
+  const { isSignedIn, isLoaded } = useUser();
   if (!isLoaded) return (
     <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
       Loading…
@@ -140,9 +120,6 @@ function AppInner() {
   );
 
   if (!isSignedIn) return <LoginPage />;
-
-  const role = user?.publicMetadata?.role;
-  if (role !== 'admin') return <NotAuthorized />;
 
   return <ErrorBoundary><AuthedApp /></ErrorBoundary>;
 }
