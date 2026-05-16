@@ -1,37 +1,40 @@
+import { useLocation, useNavigate } from 'react-router-dom';
 import { UserButton } from '@clerk/react';
 import {
   Building2, FileText, Shield, CheckSquare, Upload,
-  MessageSquare, BookOpen, ChevronRight, Users, type LucideIcon
+  MessageSquare, BookOpen, ChevronRight, Users, Target, type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Separator } from '@/components/ui/separator';
 
-type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
-type EmployeeScreen = 'chat' | 'training' | 'course';
-type Screen = AdminScreen | EmployeeScreen;
-
-interface NavBarProps {
-  role: 'admin' | 'employee';
-  screen: Screen;
-  onNavigate: (s: Screen) => void;
+interface NavItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  path: string;
 }
 
-const adminNav: { id: AdminScreen; label: string; icon: LucideIcon }[] = [
-  { id: 'onboarding', label: 'Company Setup', icon: Building2 },
-  { id: 'generation', label: 'Generate Modules', icon: FileText },
-  { id: 'review', label: 'Review', icon: CheckSquare },
-  { id: 'output', label: 'Final Output', icon: Shield },
-  { id: 'documents', label: 'Documents', icon: Upload },
-  { id: 'users', label: 'Team', icon: Users },
+// Admin navigation — old screens + new pipeline
+const adminNav: NavItem[] = [
+  { id: 'pipeline',   label: 'Pipeline',        icon: Target,      path: '/pipeline' },
+  { id: 'setup',      label: 'Company Setup',    icon: Building2,   path: '/setup' },
+  { id: 'generate',   label: 'Modules',          icon: FileText,    path: '/generate' },
+  { id: 'review',     label: 'Review',           icon: CheckSquare, path: '/review' },
+  { id: 'output',     label: 'Final Output',     icon: Shield,      path: '/output' },
+  { id: 'documents',  label: 'Documents',        icon: Upload,      path: '/documents' },
+  { id: 'users',      label: 'Team',             icon: Users,       path: '/users' },
 ];
 
-const employeeNav: { id: EmployeeScreen; label: string; icon: LucideIcon }[] = [
-  { id: 'chat', label: 'Compliance Chat', icon: MessageSquare },
-  { id: 'training', label: 'My Training', icon: BookOpen },
+// Employee navigation
+const employeeNav: NavItem[] = [
+  { id: 'chat',       label: 'Compliance Chat',  icon: MessageSquare, path: '/chat' },
+  { id: 'training',   label: 'My Training',      icon: BookOpen,      path: '/training' },
 ];
 
-export default function NavBar({ role, screen, onNavigate }: NavBarProps) {
+export default function NavBar({ role }: { role: 'admin' | 'employee' }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const items = role === 'admin' ? adminNav : employeeNav;
 
   return (
@@ -57,11 +60,11 @@ export default function NavBar({ role, screen, onNavigate }: NavBarProps) {
         <div className="space-y-0.5">
           {items.map((item) => {
             const Icon = item.icon;
-            const active = screen === item.id;
+            const active = location.pathname.startsWith(item.path);
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigate(item.id as Screen)}
+                onClick={() => navigate(item.path)}
                 className={cn(
                   'group w-full flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
                   active

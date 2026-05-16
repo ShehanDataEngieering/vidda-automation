@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
 import { Shield } from 'lucide-react';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -12,13 +13,9 @@ import DocumentManager from './screens/DocumentManager';
 import ComplianceChat from './screens/ComplianceChat';
 import TrainingDashboard from './screens/TrainingDashboard';
 import UserManagement from './screens/UserManagement';
-import CoursePlayer from './screens/CoursePlayer';
-import type { TrainingModuleWithProgress } from './types';
+import PipelinePage from './screens/PipelinePage';
 
-type AdminScreen = 'onboarding' | 'generation' | 'review' | 'output' | 'documents' | 'users';
-type EmployeeScreen = 'chat' | 'training' | 'course';
-type Screen = AdminScreen | EmployeeScreen;
-
+// Role gate components — restrict render by Clerk role metadata
 function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
   if (role !== allowed) return null;
   return <>{children}</>;
@@ -37,51 +34,40 @@ function AuthedApp() {
   const clerkCompanyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
   const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
 
-  const [screen, setScreen] = useState<Screen>(role === 'admin' ? 'onboarding' : 'chat');
   const [companyId, setCompanyId] = useState<string>(clerkCompanyId);
-  const [activeCourseModule, setActiveCourseModule] = useState<TrainingModuleWithProgress | null>(null);
 
   return (
     <div className="flex min-h-screen bg-background">
-      <NavBar role={role} screen={screen} onNavigate={setScreen} />
+      <NavBar role={role} />
       <main className="ml-56 flex-1 min-h-screen">
-        <AdminGate role={role}>
-          {screen === 'onboarding' && (
-            <Onboarding onCompanyCreated={(id) => { setCompanyId(id); setScreen('generation'); }} />
-          )}
-          {screen === 'generation' && companyId && (
-            <Generation companyId={companyId} onComplete={() => setScreen('review')} />
-          )}
-          {screen === 'review' && companyId && (
-            <ReviewDashboard companyId={companyId} onFinish={() => setScreen('output')} />
-          )}
-          {screen === 'output' && companyId && (
-            <FinalOutput companyId={companyId} />
-          )}
-          {screen === 'documents' && <DocumentManager />}
-          {screen === 'users' && <UserManagement />}
-        </AdminGate>
+        <Routes>
+          {/* Home — redirect to pipeline for admin, training for employee */}
+          <Route path="/" element={
+            role === 'admin'
+              ? <Navigate to="/pipeline" replace />
+              : <Navigate to="/lms/my-training" replace />
+          } />
 
-        <EmployeeGate role={role}>
-          {screen === 'chat' && <ComplianceChat />}
-          {screen === 'training' && (
-            <TrainingDashboard
-              onStartCourse={(m) => {
-                setActiveCourseModule(m);
-                setScreen('course');
-              }}
-            />
-          )}
-          {screen === 'course' && activeCourseModule && (
-            <CoursePlayer
-              module={activeCourseModule}
-              onBack={() => setScreen('training')}
-              onComplete={() => {
-                setActiveCourseModule(prev => prev ? { ...prev, completed_at: new Date().toISOString() } : null);
-              }}
-            />
-          )}
-        </EmployeeGate>
+          {/* New pipeline routes */}
+          <Route path="/pipeline" element={<AdminGate role={role}><PipelinePage /></AdminGate>} />
+
+          {/* Old screens — keep working during transition */}
+          <Route path="/setup" element={<AdminGate role={role}>
+            <Onboarding onCompanyCreated={(id) => { setCompanyId(id); }} />
+          </AdminGate>} />
+          <Route path="/generate" element={companyId ? <Generation companyId={companyId} onComplete={() => {}} /> : <Navigate to="/setup" />} />
+          <Route path="/review" element={companyId ? <ReviewDashboard companyId={companyId} onFinish={() => {}} /> : <Navigate to="/setup" />} />
+          <Route path="/output" element={companyId ? <FinalOutput companyId={companyId} /> : <Navigate to="/setup" />} />
+          <Route path="/documents" element={<AdminGate role={role}><DocumentManager /></AdminGate>} />
+          <Route path="/users" element={<AdminGate role={role}><UserManagement /></AdminGate>} />
+
+          {/* Employee routes */}
+          <Route path="/chat" element={<EmployeeGate role={role}><ComplianceChat /></EmployeeGate>} />
+          <Route path="/training" element={<EmployeeGate role={role}><TrainingDashboard /></EmployeeGate>} />
+
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
   );
@@ -121,14 +107,20 @@ function AppInner() {
 
   if (!isSignedIn) return <LoginPage />;
 
-  return <ErrorBoundary><AuthedApp /></ErrorBoundary>;
+  return (
+    <ErrorBoundary>
+      <AuthedApp />
+    </ErrorBoundary>
+  );
 }
 
 export default function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="vidda-theme">
       <ClerkLoaded>
-        <AppInner />
+        <BrowserRouter>
+          <AppInner />
+        </BrowserRouter>
       </ClerkLoaded>
     </ThemeProvider>
   );
