@@ -16,6 +16,7 @@ import UserManagement from './screens/UserManagement';
 import PipelinePage from './screens/PipelinePage';
 import RoleImport from './screens/RoleImport';
 import RiskAssessment from './screens/RiskAssessment';
+import AMLRMapping from './screens/AMLRMapping';
 
 // Role gate components — restrict render by Clerk role metadata
 function RoleGate({ role, allowed, children }: { role: 'admin' | 'employee'; allowed: 'admin' | 'employee'; children: ReactNode }) {
@@ -55,6 +56,7 @@ function AuthedApp() {
           <Route path="/pipeline/new" element={<AdminGate role={role}><RoleImport /></AdminGate>} />
           <Route path="/pipeline/:planId" element={<AdminGate role={role}><RoleImport /></AdminGate>} />
           <Route path="/pipeline/:planId/risk" element={<AdminGate role={role}><RiskAssessment /></AdminGate>} />
+          <Route path="/pipeline/:planId/amlr" element={<AdminGate role={role}><AMLRMapping /></AdminGate>} />
 
           {/* Old screens — keep working during transition */}
           <Route path="/setup" element={<AdminGate role={role}>
