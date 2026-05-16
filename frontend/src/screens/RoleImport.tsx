@@ -1,22 +1,32 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/react';
-import { FileText, Loader2, Target, AlertTriangle, ChevronRight } from 'lucide-react';
+import { FileText, Loader2, Target, AlertTriangle, ChevronRight, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
 import type { RoleProfileV6 } from '../types-v6';
 import { DEMO_ROLE_DESCRIPTION } from '../demo-script';
 
 const ROLE_COLORS: Record<string, string> = {
-  'Customer Advisor': 'bg-blue-100 text-blue-700 border-blue-200',
-  'KYC Analyst': 'bg-teal-100 text-teal-700 border-teal-200',
-  'TM Analyst': 'bg-purple-100 text-purple-700 border-purple-200',
-  'AML DDI Manager': 'bg-amber-100 text-amber-700 border-amber-200',
-  'MLRO': 'bg-red-100 text-red-700 border-red-200',
-  'other': 'bg-gray-100 text-gray-700 border-gray-200',
+  'Customer Advisor': 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300',
+  'KYC Analyst': 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300',
+  'TM Analyst': 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300',
+  'AML DDI Manager': 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300',
+  'MLRO': 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300',
+  'other': 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-900 dark:text-gray-400',
+};
+
+const CLASSIFICATION_ICONS: Record<string, string> = {
+  'Customer Advisor': '👥',
+  'KYC Analyst': '🔍',
+  'TM Analyst': '📊',
+  'AML DDI Manager': '📋',
+  'MLRO': '🏛️',
+  'other': '📄',
 };
 
 export default function RoleImport() {
@@ -31,13 +41,11 @@ export default function RoleImport() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState('');
 
-  // Called when user clicks "Analyse Role"
   async function analyseRole() {
     if (!roleDescription.trim() || !planId) return;
     setAnalysing(true);
     setError('');
     setWarnings([]);
-
     try {
       const res = await api(`/api/pipeline/${planId}/analyze-role`, {
         method: 'POST',
@@ -51,124 +59,138 @@ export default function RoleImport() {
       const data = await res.json();
       setRoleProfile(data.roleProfile as RoleProfileV6);
       setWarnings(data.warnings ?? []);
-    } catch {
-      setError('Connection error. Is the backend running?');
-    } finally {
-      setAnalysing(false);
-    }
+    } catch { setError('Connection error'); }
+    finally { setAnalysing(false); }
   }
 
-  // Ask user to create a plan first if no planId in URL
   async function createPlanAndGo() {
     const companyId = user?.publicMetadata?.companyId as string | undefined;
-    if (!companyId) {
-      setError('No company found. Create a company in Setup first.');
-      return;
-    }
+    if (!companyId) { setError('No company found. Create a company in Setup first.'); return; }
     try {
       const res = await api('/api/pipeline', {
-        method: 'POST',
-        body: JSON.stringify({ companyId, createdBy: user?.id ?? 'unknown' }),
+        method: 'POST', body: JSON.stringify({ companyId, createdBy: user?.id ?? 'unknown' }),
       });
       const data = await res.json();
       navigate(`/pipeline/${data.planId}`, { replace: true });
-    } catch {
-      setError('Failed to create plan');
-    }
+    } catch { setError('Failed to create plan'); }
   }
 
-  // Already have a planId — show the role import form
   if (planId) {
     return (
-      <div className="p-6 max-w-3xl">
-        <div className="flex items-center gap-2 mb-6">
-          <Target className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <h1 className="text-lg font-semibold">Step 1: Role Import</h1>
-            <p className="text-sm text-muted-foreground">Paste a role description to begin the AMLR compliance training pipeline.</p>
+      <div className="p-8 max-w-4xl mx-auto animate-in fade-in duration-300">
+        <PipelineStepper steps={PIPELINE_STEPS} currentStep="role" onNavigate={(path) => navigate(`/pipeline/${planId}${path}`)} />
+
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+              <Target className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Role Import & Analysis</h1>
+              <p className="text-sm text-muted-foreground">Paste a role description — AI extracts the profile and classifies against AMLR archetypes.</p>
+            </div>
           </div>
         </div>
 
-        {/* Demo helper — fills textarea with KYC Analyst from demo script */}
+        {error && (
+          <div className="flex items-center gap-2 p-4 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-sm mb-6 animate-in slide-in-from-top-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          </div>
+        )}
+
         {!roleProfile && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Role Description</CardTitle>
-              <CardDescription>
-                Paste any job role description. The AI will extract the profile and classify it against AMLR role archetypes.
-              </CardDescription>
+          <Card className="mb-6 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" /> Role Description
+              </CardTitle>
+              <CardDescription>Paste any job role description. The AI will extract the profile and classify it against 5 known AMLR role archetypes.</CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={roleDescription}
                 onChange={e => setRoleDescription(e.target.value)}
                 placeholder="Paste a role description here…"
-                className="min-h-[200px] text-xs font-mono"
+                className="min-h-[220px] text-xs font-mono leading-relaxed border-dashed focus:border-solid transition-colors"
               />
-              <div className="flex items-center gap-2 mt-3">
-                <Button onClick={analyseRole} disabled={analysing || !roleDescription.trim()}>
-                  {analysing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Analysing…</> : 'Analyse Role'}
+              <div className="flex items-center gap-2 mt-4">
+                <Button onClick={analyseRole} disabled={analysing || !roleDescription.trim()} size="lg" className="gap-2">
+                  {analysing ? <><Loader2 className="h-4 w-4 animate-spin" /> Analysing with AI…</> : <><Sparkles className="h-4 w-4" /> Analyse Role</>}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setRoleDescription(DEMO_ROLE_DESCRIPTION)}>
-                  Load Demo Role (KYC Analyst)
+                <Button variant="outline" size="lg" onClick={() => setRoleDescription(DEMO_ROLE_DESCRIPTION)}>
+                  Load Demo (KYC Analyst)
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm mb-4">
-            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-          </div>
+        {analysing && (
+          <Card className="mb-6 border-primary/30 bg-primary/5 animate-pulse">
+            <CardContent className="py-8 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-sm font-medium text-primary">AI is analysing the role description…</p>
+              <p className="text-xs text-muted-foreground mt-1">Extracting profile, classifying against AMLR archetypes, generating consequence analysis.</p>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Role Profile Card — shown after AI analysis */}
         {roleProfile && (
           <>
-            <Card className="mb-4 border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
-              <CardHeader className="pb-3">
+            <Card className="mb-6 border-emerald-200 dark:border-emerald-800 shadow-sm animate-in zoom-in-95 duration-300">
+              <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm text-green-700 dark:text-green-400">
-                    Role Analysis Complete
+                  <CardTitle className="text-base flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-5 w-5" /> Role Analysis Complete
                   </CardTitle>
-                  <Badge variant="outline" className={ROLE_COLORS[roleProfile.classified_as] ?? ROLE_COLORS.other}>
-                    {roleProfile.classified_as}
+                  <Badge className={`${ROLE_COLORS[roleProfile.classified_as] ?? ROLE_COLORS.other} text-xs px-3 py-1`}>
+                    {CLASSIFICATION_ICONS[roleProfile.classified_as] ?? '📄'} {roleProfile.classified_as}
                   </Badge>
                 </div>
-                <CardDescription className="text-green-700/70 dark:text-green-400/70">
-                  AI confidence: {(roleProfile.classification_confidence * 100).toFixed(0)}%
-                </CardDescription>
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-lg font-bold text-primary">{(roleProfile.classification_confidence * 100).toFixed(0)}%</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Confidence</p>
+                      <p className="text-xs text-muted-foreground">{roleProfile.classification_confidence >= 0.8 ? 'High match' : 'Moderate match'}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-xs">{roleProfile.line_of_defence}</Badge>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <p className="text-muted-foreground font-medium uppercase tracking-wide">Role Title</p>
-                    <p className="font-medium">{roleProfile.role_title}</p>
+              <CardContent className="space-y-4 pt-0">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Role Title</p>
+                    <p className="font-semibold leading-snug">{roleProfile.role_title}</p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground font-medium uppercase tracking-wide">Line of Defence</p>
-                    <Badge variant="outline">{roleProfile.line_of_defence}</Badge>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Line of Defence</p>
+                    <Badge variant="outline" className="text-xs">{roleProfile.line_of_defence}</Badge>
                   </div>
-                  <div className="col-span-2">
-                    <p className="text-muted-foreground font-medium uppercase tracking-wide">Daily Activities</p>
-                    <p className="leading-relaxed">{roleProfile.daily_activities}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-muted-foreground font-medium uppercase tracking-wide">Key Decisions</p>
-                    <p className="leading-relaxed">{roleProfile.key_decisions}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-muted-foreground font-medium uppercase tracking-wide">Mistake Consequences</p>
-                    <p className="leading-relaxed text-destructive/80">{roleProfile.mistake_consequences}</p>
-                  </div>
+                </div>
+                <div className="space-y-3 pt-2 border-t">
+                  {[
+                    { label: 'Daily Activities', value: roleProfile.daily_activities },
+                    { label: 'Key Decisions', value: roleProfile.key_decisions },
+                    { label: 'Mistake Consequences', value: roleProfile.mistake_consequences, destructive: true },
+                  ].map(item => (
+                    <div key={item.label}>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
+                      <p className={`text-sm leading-relaxed ${item.destructive ? 'text-red-600/80 dark:text-red-400/80' : 'text-muted-foreground'}`}>
+                        {item.value}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
 
             {warnings.length > 0 && (
-              <Card className="mb-4 border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-                <CardContent className="py-3">
+              <Card className="mb-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+                <CardContent className="py-3 space-y-1">
                   {warnings.map((w, i) => (
                     <p key={i} className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
                       <AlertTriangle className="h-3 w-3 shrink-0" /> {w}
@@ -178,7 +200,7 @@ export default function RoleImport() {
               </Card>
             )}
 
-            <Button onClick={() => navigate(`/pipeline/${planId}/risk`)}>
+            <Button size="lg" onClick={() => navigate(`/pipeline/${planId}/risk`)} className="gap-2">
               Continue to Risk Assessment <ChevronRight className="h-4 w-4" />
             </Button>
           </>
@@ -187,32 +209,45 @@ export default function RoleImport() {
     );
   }
 
-  // No planId — show create plan screen
   return (
-    <div className="p-6 max-w-3xl">
-      <div className="flex items-center gap-2 mb-6">
-        <FileText className="h-5 w-5 text-muted-foreground" />
-        <div>
-          <h1 className="text-lg font-semibold">New Training Plan</h1>
-          <p className="text-sm text-muted-foreground">Create a new AMLR 2024/1624 compliance training plan.</p>
+    <div className="p-8 max-w-2xl mx-auto animate-in fade-in duration-300">
+      <div className="text-center mb-10">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20 mx-auto mb-4">
+          <FileText className="h-8 w-8 text-primary" />
         </div>
+        <h1 className="text-2xl font-semibold tracking-tight mb-2">AMLR Training Plan Generator</h1>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+          Generate role-specific, risk-based compliance training plans compliant with EU Regulation 2024/1624 (AMLR).
+          The AI analyses a role description, scores 5 risk dimensions, maps AMLR articles, and produces a 4-quarter training plan.
+        </p>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground mb-4">
-            You will paste a job role description. The AI will extract the role profile,
-            classify it against AMLR role archetypes, and guide you through the full pipeline:
-            Risk Assessment → AMLR Article Mapping → Training Plan Generation → LMS Assignment.
-          </p>
-          <Button onClick={createPlanAndGo}>
-            Start New Pipeline <ChevronRight className="h-4 w-4" />
-          </Button>
+      <Card className="shadow-sm">
+        <CardContent className="pt-8 pb-6 space-y-6">
+          <div className="grid grid-cols-5 gap-3 text-center">
+            {[
+              { label: 'Role Import', icon: '📥' },
+              { label: 'Risk Matrix', icon: '🛡️' },
+              { label: 'AMLR Map', icon: '📜' },
+              { label: 'Training Plan', icon: '📅' },
+              { label: 'LMS Assign', icon: '👥' },
+            ].map((s, i) => (
+              <div key={i} className="space-y-1">
+                <span className="text-xl">{s.icon}</span>
+                <p className="text-[10px] font-medium text-muted-foreground leading-tight">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-center pt-2">
+            <Button size="lg" onClick={createPlanAndGo} className="gap-2">
+              Start New Pipeline <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm">
+        <div className="flex items-center gap-2 p-4 mt-6 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-sm">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
         </div>
       )}

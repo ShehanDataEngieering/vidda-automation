@@ -1,4 +1,4 @@
-import { Check, ChevronRight, type LucideIcon } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Step {
