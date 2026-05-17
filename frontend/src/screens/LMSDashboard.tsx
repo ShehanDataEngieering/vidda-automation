@@ -65,10 +65,12 @@ export default function LMSDashboard() {
 
   return (
     <div className="p-6 max-w-4xl">
-      <div className="flex items-center gap-2 mb-6">
-        <BookOpen className="h-5 w-5 text-muted-foreground" />
+      <div className="flex items-center gap-3 mb-8">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
+          <BookOpen className="h-5 w-5 text-white dark:text-slate-900" />
+        </div>
         <div>
-          <h1 className="text-lg font-semibold">My Training Plan — {roleTitle}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">My Training Plan — {roleTitle}</h1>
           <p className="text-sm text-muted-foreground">AMLR 2024/1624 compliance training assigned to you.</p>
         </div>
       </div>

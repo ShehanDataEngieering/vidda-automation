@@ -45,7 +45,17 @@ export default function LMSView() {
   return (
     <div className="p-8 max-w-6xl mx-auto animate-in fade-in duration-300">
       <PipelineStepper steps={PIPELINE_STEPS} currentStep="lms" onNavigate={(path) => navigate(`/pipeline/${planId}${path}`)} />
-      <div className="mb-8"><div className="flex items-center gap-3 mb-1"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20"><Users className="h-5 w-5 text-primary" /></div><div><h1 className="text-xl font-semibold tracking-tight">LMS Assignment — {plan.role_title}</h1><p className="text-sm text-muted-foreground">Assign this approved AMLR training plan to employees with due dates.</p></div></div></div>
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
+            <Users className="h-5 w-5 text-white dark:text-slate-900" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">LMS Assignment — {plan.role_title}</h1>
+            <p className="text-sm text-muted-foreground">Assign training plans to employees with due dates.</p>
+          </div>
+        </div>
+      </div>
       {error && <div className="flex items-center gap-2 p-4 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-sm mb-6"><AlertTriangle className="h-4 w-4" /> {error}</div>}
 
       {assignments.length > 0 && (

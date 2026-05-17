@@ -5,8 +5,6 @@ import { Shield } from 'lucide-react';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import NavBar from './components/NavBar';
-import Onboarding from './screens/Onboarding';
-import DocumentManager from './screens/DocumentManager';
 import UserManagement from './screens/UserManagement';
 import PipelinePage from './screens/PipelinePage';
 import RoleImport from './screens/RoleImport';
@@ -59,8 +57,6 @@ function AuthedApp() {
           <Route path="/lms/my-training" element={<EmployeeGate role={role}><LMSDashboard /></EmployeeGate>} />
 
           {/* Utility screens */}
-          <Route path="/setup" element={<AdminGate role={role}><Onboarding onCompanyCreated={() => {}} /></AdminGate>} />
-          <Route path="/documents" element={<AdminGate role={role}><DocumentManager /></AdminGate>} />
           <Route path="/users" element={<AdminGate role={role}><UserManagement /></AdminGate>} />
 
           {/* Catch-all */}

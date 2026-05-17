@@ -136,11 +136,13 @@ export default function UserManagement() {
   return (
     <div className="p-6 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-6">
-        <Users className="h-5 w-5 text-muted-foreground" />
+      <div className="flex items-center gap-3 mb-8">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
+          <Users className="h-5 w-5 text-white dark:text-slate-900" />
+        </div>
         <div>
-          <h1 className="text-lg font-semibold">Team Management</h1>
-          <p className="text-sm text-muted-foreground">Invite employees and manage access to your company's compliance platform.</p>
+          <h1 className="text-xl font-semibold tracking-tight">Team Management</h1>
+          <p className="text-sm text-muted-foreground">Manage access to your compliance platform.</p>
         </div>
       </div>
 

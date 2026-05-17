@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { UserButton } from '@clerk/react';
 import {
-  Building2, Shield, Upload, BookOpen, ChevronRight, Users, Target, type LucideIcon
+  Shield, Target, BookOpen, ChevronRight, Users, type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -14,11 +14,9 @@ interface NavItem {
   path: string;
 }
 
-// Admin navigation — pipeline + utility screens
+// Admin navigation — pipeline + users only
 const adminNav: NavItem[] = [
-  { id: 'pipeline',   label: 'Pipeline',        icon: Target,      path: '/pipeline' },
-  { id: 'setup',      label: 'Company Setup',    icon: Building2,   path: '/setup' },
-  { id: 'documents',  label: 'Documents',        icon: Upload,      path: '/documents' },
+  { id: 'pipeline',   label: 'Pipeline',         icon: Target,      path: '/pipeline' },
   { id: 'users',      label: 'Team',             icon: Users,       path: '/users' },
 ];
 
