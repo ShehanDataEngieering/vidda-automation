@@ -23,11 +23,16 @@ pipelineRouter.use(requireSignedIn, requireRole('admin'));
 // Helper: enforce company scoping + fetch plan
 async function getScopedPlan(req: Request, res: Response):
   Promise<{ ctx: { userId: string; companyId: string; role: 'admin' | 'employee' }; planRow: PipelinePlan } | null> {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return null;
+  const id = req.params.id;
+  if (!id || id === 'undefined' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    res.status(400).json({ error: 'Invalid plan ID' });
+    return null;
+  }
   const { rows } = await db.query<PipelinePlan>(
     `SELECT * FROM training_plans WHERE id = $1 AND company_id = $2`,
-    [req.params.id, ctx.companyId],
+    [id, ctx.companyId],
   );
   if (!rows[0]) {
     res.status(404).json({ error: 'Plan not found or access denied' });
@@ -41,7 +46,7 @@ async function getScopedPlan(req: Request, res: Response):
 // ===========================================================================
 
 pipelineRouter.get('/', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   const { rows } = await db.query<PipelinePlan>(
@@ -60,21 +65,11 @@ pipelineRouter.get('/', async (req: Request, res: Response) => {
 });
 
 // ===========================================================================
-// FETCH single plan state
-// ===========================================================================
-
-pipelineRouter.get('/:id', async (req: Request, res: Response) => {
-  const result = await getScopedPlan(req, res);
-  if (!result) return;
-  res.json(result.planRow);
-});
-
-// ===========================================================================
-// CREATE empty plan
+// CREATE empty plan (static route BEFORE dynamic /:id)
 // ===========================================================================
 
 pipelineRouter.post('/', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   const { rows } = await db.query<{ id: string }>(
@@ -85,34 +80,55 @@ pipelineRouter.post('/', async (req: Request, res: Response) => {
 });
 
 // ===========================================================================
-// Step 1 — save raw role description (before AI analysis or with clarifications)
+// Admin dashboard: all assignments across company plans
+// MUST be before /:id so Express doesn't match "assignments" as an id
 // ===========================================================================
 
-pipelineRouter.patch('/:id/role', async (req: Request, res: Response) => {
+pipelineRouter.get('/assignments/all', async (req: Request, res: Response) => {
+  const ctx = await getUserContext(req, res);
+  if (!ctx) return;
+
+  const { rows } = await db.query(
+    `SELECT
+       a.id, a.plan_id, a.user_id, a.module_index, a.quarter,
+       a.due_date, a.status, a.completed_at,
+       tp.role_title
+     FROM plan_assignments a
+     JOIN training_plans tp ON tp.id = a.plan_id
+     WHERE tp.company_id = $1
+     ORDER BY a.status, a.quarter, a.module_index`,
+    [ctx.companyId],
+  );
+  res.json(rows);
+});
+
+// ===========================================================================
+// Approved plans (public within company)
+// MUST be before /:id so Express doesn't match "plans" as an id
+// ===========================================================================
+
+pipelineRouter.get('/plans/approved', async (req: Request, res: Response) => {
+  const ctx = await getUserContext(req, res);
+  if (!ctx) return;
+
+  const { rows } = await db.query(
+    `SELECT id, role_title, line_of_defence, training_plan, reviewer, updated_at, status
+     FROM training_plans
+     WHERE company_id = $1 AND status = 'approved'
+     ORDER BY updated_at DESC`,
+    [ctx.companyId],
+  );
+  res.json(rows);
+});
+
+// ===========================================================================
+// FETCH single plan state — DYNAMIC routes after all static ones
+// ===========================================================================
+
+pipelineRouter.get('/:id', async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
-  const { planRow, ctx } = result;
-
-  const { roleDescription, roleProfile } = req.body;
-  const newVersion = planRow.version + 1;
-
-  await db.query(
-    `UPDATE training_plans
-     SET role_description = COALESCE($1, role_description),
-         role_profile = COALESCE($2, role_profile),
-         version = $3,
-         updated_at = NOW()
-     WHERE id = $4`,
-    [roleDescription ?? null, roleProfile ? JSON.stringify(roleProfile) : null, newVersion, planRow.id],
-  );
-
-  await db.query(
-    `INSERT INTO plan_events (plan_id, version, step, action, reviewer, after_state)
-     VALUES ($1, $2, 'role', 'human_override', $3, $4)`,
-    [planRow.id, newVersion, ctx.userId, JSON.stringify({ roleDescription, roleProfile })],
-  );
-
-  res.json({ ok: true, version: newVersion });
+  res.json(result.planRow);
 });
 
 // ===========================================================================
@@ -655,68 +671,6 @@ pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
   }
 
   res.json({ ok: true, assigned: users.length });
-});
-
-// ===========================================================================
-// Admin dashboard: all assignments across all company plans
-// ===========================================================================
-
-pipelineRouter.get('/assignments/all', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
-  if (!ctx) return;
-
-  const { rows } = await db.query(
-    `SELECT
-       a.id, a.plan_id, a.user_id, a.module_index, a.quarter,
-       a.due_date, a.status, a.completed_at,
-       tp.role_title
-     FROM plan_assignments a
-     JOIN training_plans tp ON tp.id = a.plan_id
-     WHERE tp.company_id = $1
-     ORDER BY a.status, a.quarter, a.module_index`,
-    [ctx.companyId],
-  );
-  res.json(rows);
-});
-
-// ===========================================================================
-// Admin dashboard: all assignments across all company plans
-// ===========================================================================
-
-pipelineRouter.get('/assignments/all', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
-  if (!ctx) return;
-
-  const { rows } = await db.query(
-    `SELECT
-       a.id, a.plan_id, a.user_id, a.module_index, a.quarter,
-       a.due_date, a.status, a.completed_at,
-       tp.role_title
-     FROM plan_assignments a
-     JOIN training_plans tp ON tp.id = a.plan_id
-     WHERE tp.company_id = $1
-     ORDER BY a.status, a.quarter, a.module_index`,
-    [ctx.companyId],
-  );
-  res.json(rows);
-});
-
-// ===========================================================================
-// Approved plans (public within company)
-// ===========================================================================
-
-pipelineRouter.get('/plans/approved', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
-  if (!ctx) return;
-
-  const { rows } = await db.query(
-    `SELECT id, role_title, line_of_defence, training_plan, reviewer, updated_at, status
-     FROM training_plans
-     WHERE company_id = $1 AND status = 'approved'
-     ORDER BY updated_at DESC`,
-    [ctx.companyId],
-  );
-  res.json(rows);
 });
 
 export default pipelineRouter;

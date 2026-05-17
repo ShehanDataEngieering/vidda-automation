@@ -28,7 +28,7 @@ documentsRouter.post(
   requireRole('admin'),
   upload.single('pdf'),
   async (req: Request, res: Response) => {
-    const user = getUserContext(req, res);
+    const user = await getUserContext(req, res);
     if (!user) return;
 
     if (!req.file) {
@@ -156,7 +156,7 @@ documentsRouter.post(
  * List all documents for the admin's company.
  */
 documentsRouter.get('/', requireSignedIn, requireRole('admin'), async (req: Request, res: Response) => {
-  const user = getUserContext(req, res);
+  const user = await getUserContext(req, res);
   if (!user) return;
 
   const { rows } = await pool.query(
@@ -174,7 +174,7 @@ documentsRouter.get('/', requireSignedIn, requireRole('admin'), async (req: Requ
  * Poll chunking status for a single document.
  */
 documentsRouter.get('/:id/status', requireSignedIn, requireRole('admin'), async (req: Request, res: Response) => {
-  const user = getUserContext(req, res);
+  const user = await getUserContext(req, res);
   if (!user) return;
 
   const { rows } = await pool.query(
@@ -193,7 +193,7 @@ documentsRouter.get('/:id/status', requireSignedIn, requireRole('admin'), async 
  * Delete a document and all its chunks (cascades via FK).
  */
 documentsRouter.delete('/:id', requireSignedIn, requireRole('admin'), async (req: Request, res: Response) => {
-  const user = getUserContext(req, res);
+  const user = await getUserContext(req, res);
   if (!user) return;
 
   const { rowCount } = await pool.query(

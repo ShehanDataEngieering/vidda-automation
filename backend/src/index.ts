@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { clerkMiddleware } from './middleware/auth';
+import { clerkMiddleware, resolveAuthUser } from './middleware/auth';
 import { companyRouter } from './routes/company';
 import { authRouter } from './routes/auth';
 import { documentsRouter } from './routes/documents';
@@ -37,6 +37,12 @@ app.get('/health', (_req, res) => {
 
 // Clerk session parsing
 app.use(clerkMiddleware());
+
+// Resolve user metadata — fills req.resolvedUser from JWT claims or Clerk API fallback
+app.use(resolveAuthUser);
+
+// Resolve user metadata — fills req.resolvedUser from JWT claims or Clerk API fallback
+app.use(resolveAuthUser);
 
 // Routes
 app.use('/api/company', companyRouter);

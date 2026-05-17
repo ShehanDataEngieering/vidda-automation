@@ -12,7 +12,7 @@ usersRouter.use(requireSignedIn, requireRole('admin'));
 
 /** GET /api/users — list all users in this company */
 usersRouter.get('/', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   try {
@@ -56,7 +56,7 @@ const InviteSchema = z.object({
 
 /** POST /api/users/invite — send a Clerk invitation with pre-set metadata */
 usersRouter.post('/invite', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   const parsed = InviteSchema.safeParse(req.body);
@@ -106,7 +106,7 @@ usersRouter.post('/invite', async (req: Request, res: Response) => {
 
 /** GET /api/users/invitations — pending invitations for this company */
 usersRouter.get('/invitations', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   try {
@@ -140,7 +140,7 @@ usersRouter.get('/invitations', async (req: Request, res: Response) => {
 
 /** DELETE /api/users/invitations/:id — revoke a pending invitation */
 usersRouter.delete('/invitations/:id', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   const { id } = req.params;
@@ -162,7 +162,7 @@ const UpdateRoleSchema = z.object({
 });
 
 usersRouter.patch('/:userId/role', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   const { userId } = req.params;
@@ -201,7 +201,7 @@ usersRouter.patch('/:userId/role', async (req: Request, res: Response) => {
 
 /** DELETE /api/users/:userId — remove user from company (clears metadata) */
 usersRouter.delete('/:userId', async (req: Request, res: Response) => {
-  const ctx = getUserContext(req, res);
+  const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
   const { userId } = req.params;

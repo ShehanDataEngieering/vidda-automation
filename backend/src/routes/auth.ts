@@ -51,8 +51,8 @@ authRouter.post('/set-company', requireSignedIn, async (req: Request, res: Respo
  * GET /api/auth/me
  * Returns the current user's context extracted from Clerk session claims.
  */
-authRouter.get('/me', requireSignedIn, (req: Request, res: Response) => {
-  const user = getUserContext(req, res);
+authRouter.get('/me', requireSignedIn, async (req: Request, res: Response) => {
+  const user = await getUserContext(req, res);
   if (!user) return; // getUserContext already sent 401/403
   res.json(user);
 });

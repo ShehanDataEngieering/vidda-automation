@@ -15,21 +15,24 @@ let TEST_USER_ID = 'e2e-test-admin';
 let TEST_COMPANY_ID = '';
 
 // Auth mock reads from mutable vars (set during setup)
-authModule.requireSignedIn = (req: any, _res: any, next: any) => {
-  req.auth = () => ({
+// Simulates real Clerk behavior: sessionClaims does NOT include publicMetadata,
+// so our resolveAuthUser middleware must provide it via req.resolvedUser.
+authModule.requireSignedIn = (req: any, _res: any, next: any) => next();
+authModule.requireRole = () => (_req: any, _res: any, next: any) => next();
+authModule.resolveAuthUser = (req: any, _res: any, next: any) => {
+  req.resolvedUser = {
     userId: TEST_USER_ID,
-    sessionId: 'e2e-s',
-    tokenType: 'session_token',
-    sessionClaims: {
-      sub: TEST_USER_ID,
-      sid: 'e2e-s',
-      publicMetadata: { role: 'admin', companyId: TEST_COMPANY_ID, employeeRole: null },
-    },
-    getToken: () => Promise.resolve('mock-token'),
-  });
+    publicMetadata: { role: 'admin', companyId: TEST_COMPANY_ID, employeeRole: null },
+  };
   next();
 };
-authModule.requireRole = () => (_req: any, _res: any, next: any) => next();
+authModule.resolveAuthUser = (req: any, _res: any, next: any) => {
+  req.resolvedUser = {
+    userId: TEST_USER_ID,
+    publicMetadata: { role: 'admin', companyId: TEST_COMPANY_ID, employeeRole: null },
+  };
+  next();
+};
 
 // ── Phase 2: Load pipeline router (uses patched middleware) ──
 import express from 'express';
@@ -38,6 +41,7 @@ import { pipelineRouter } from '../routes/pipeline';
 
 const app = express();
 app.use(express.json());
+app.use(authModule.resolveAuthUser); // Populate req.resolvedUser before routes
 app.use('/api/pipeline', pipelineRouter);
 
 let planId = '';

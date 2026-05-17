@@ -13,7 +13,7 @@ trainingRouter.use(requireSignedIn, requireRole('employee'));
 
 // Get employee's assigned plan with module details
 trainingRouter.get('/my-plan', async (req: Request, res: Response) => {
-  const user = getUserContext(req, res);
+  const user = await getUserContext(req, res);
   if (!user) return;
 
   const { rows } = await pool.query(
@@ -52,7 +52,7 @@ trainingRouter.get('/my-plan', async (req: Request, res: Response) => {
 
 // Mark a module as in_progress or completed (3-state status)
 trainingRouter.patch('/my-plan/:assignmentId', async (req: Request, res: Response) => {
-  const user = getUserContext(req, res);
+  const user = await getUserContext(req, res);
   if (!user) return;
 
   const { status } = req.body;
