@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS training_plans (
   risk_matrix JSONB,
   amlr_mappings JSONB,
   training_plan JSONB,
+  quality_score INTEGER,
+  quality_breakdown JSONB,
   current_step VARCHAR(20) DEFAULT 'role',
   version INTEGER DEFAULT 1,
   status VARCHAR(20) DEFAULT 'draft'

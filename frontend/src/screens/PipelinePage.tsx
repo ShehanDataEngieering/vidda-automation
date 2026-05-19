@@ -87,7 +87,9 @@ export default function PipelinePage() {
   async function createPlan() {
     if (!companyId) return;
     const res = await api('/api/pipeline', { method: 'POST' });
+    if (!res.ok) return;
     const data = await res.json() as { planId: string };
+    if (!data.planId) return;
     navigate(`/pipeline/${data.planId}`);
   }
 
@@ -251,18 +253,18 @@ export default function PipelinePage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Coverage Overview</CardTitle>
-              <CardDescription className="text-xs">Regulatory coverage for active plans.</CardDescription>
+              <CardDescription className="text-xs">AMLR article coverage for active plans.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {['AML', 'KYC', 'GDPR', 'DORA'].map(reg => {
+              {['Article 9', 'Article 10', 'Article 11', 'Article 12', 'Article 13'].map(article => {
                 const covered = plans.some(p =>
-                  p.amlr_mappings?.some(m => m.article.toLowerCase().includes(reg.toLowerCase()))
+                  p.amlr_mappings?.some(m => m.article === article)
                 );
                 return (
-                  <div key={reg} className="flex items-center justify-between">
-                    <span className="text-xs font-medium">{reg}</span>
+                  <div key={article} className="flex items-center justify-between">
+                    <span className="text-xs font-medium">{article}</span>
                     {covered ? (
-                      <Badge variant="success" className="text-[10px]">Covered</Badge>
+                      <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Covered</Badge>
                     ) : (
                       <Badge variant="secondary" className="text-[10px]">Not mapped</Badge>
                     )}

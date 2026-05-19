@@ -28,7 +28,7 @@ const EMPLOYEE_ROLES = [
 ];
 
 function Avatar({ user }: { user: CompanyUser }) {
-  const initials = `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase() || user.email[0]?.toUpperCase() || '?';
+  const initials = `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || user.email?.[0]?.toUpperCase() || '?';
   return (
     <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0 overflow-hidden">
       {user.imageUrl ? (

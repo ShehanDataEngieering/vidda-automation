@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/client';
+import { clerkClient } from '@clerk/express';
 import { openrouter, DEFAULT_MODEL, FALLBACK_MODEL } from '../services/llm/openrouter';
 import { PIPELINE_SYSTEM_PROMPT, ROLE_ANALYSIS_USER, RISK_ASSESSMENT_USER, AMLR_MAPPING_USER, TRAINING_PLAN_USER } from '../services/llm/pipelinePrompt';
 import { validateRoleProfile, validateRiskMatrix, validateAMLRMappings, validateTrainingPlan } from '../services/llm/pipelineValidator';
@@ -7,6 +8,8 @@ import { searchChunks } from '../services/rag/vectorSearch';
 import { logger } from '../utils/logger';
 import { getUserContext } from '../utils/user';
 import { requireSignedIn, requireRole } from '../middleware/auth';
+import { getArchetype, mergePlanWithArchetype } from '../services/llm/archetypes';
+import { evaluatePlan } from '../services/llm/qualityScorer';
 import type { PipelinePlan } from '../types';
 
 // ===========================================================================
@@ -54,6 +57,7 @@ pipelineRouter.get('/', async (req: Request, res: Response) => {
        id, company_id, created_by,
        role_title, role_description, line_of_defence,
        role_profile, risk_matrix, amlr_mappings, training_plan,
+       quality_score, quality_breakdown,
        current_step, version, status, reviewer,
        created_at, updated_at
      FROM training_plans
@@ -540,19 +544,40 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
       res.end(); return;
     }
 
+    // ── Archetype fallback merge (deterministic augmentation) ──
+    let finalPlan = validation.data;
+    const archetype = roleProfile?.classified_as ? getArchetype(roleProfile.classified_as) : null;
+    if (archetype && (roleProfile?.classification_confidence ?? 0) >= 0.70) {
+      finalPlan = mergePlanWithArchetype(validation.data, archetype, {
+        ensureCoverage: true,
+        fallbackJustification: true,
+      });
+      logger.info('Merged plan with archetype', { planId, archetype: roleProfile.classified_as, confidence: roleProfile.classification_confidence });
+    }
+
+    // ── Automated quality scoring (deterministic + LLM) ──
+    let qualityScore: Record<string, unknown> | null = null;
+    try {
+      const qScore = await evaluatePlan(finalPlan, riskMatrix, roleProfile?.role_title ?? 'Unknown Role');
+      qualityScore = qScore as unknown as Record<string, unknown>;
+      logger.info('Quality score generated', { planId, total: qScore.total });
+    } catch (err) {
+      logger.warn('Quality scoring failed', { error: String(err) });
+    }
+
     await db.query(
-      `UPDATE training_plans SET training_plan = $1, current_step = 'plan', updated_at = NOW() WHERE id = $2`,
-      [JSON.stringify(validation.data), planId],
+      `UPDATE training_plans SET training_plan = $1, quality_score = $2, quality_breakdown = $3, current_step = 'plan', updated_at = NOW() WHERE id = $4`,
+      [JSON.stringify(finalPlan), qualityScore?.total ?? null, qualityScore ? JSON.stringify(qualityScore) : null, planId],
     );
 
     await db.query(
       `INSERT INTO plan_events (plan_id, version, step, action, after_state)
        VALUES ($1, $2, 'plan', 'ai_generated', $3)`,
-      [planId, planRow.version, JSON.stringify(validation.data)],
+      [planId, planRow.version, JSON.stringify({ plan: finalPlan, quality: qualityScore })],
     );
 
-    logger.info('Training plan generated', { planId, model: modelUsed });
-    send({ type: 'done', plan: validation.data, warnings: validation.warnings });
+    logger.info('Training plan generated', { planId, model: modelUsed, archetypeMerged: !!archetype });
+    send({ type: 'done', plan: finalPlan, quality: qualityScore, warnings: validation.warnings });
   } catch (err) {
     logger.error('Plan generation failed', { error: String(err) });
     send({ type: 'error', message: 'AI generation failed' });
@@ -622,7 +647,7 @@ pipelineRouter.patch('/:id/approve', async (req: Request, res: Response) => {
 });
 
 pipelineRouter.post('/:id/regenerate-plan', (req: Request, res: Response) => {
-  res.status(307).json({ redirect: `/api/pipeline/${req.params.id}/generate-plan`, message: 'Regeneration triggered. Call generate-plan.' });
+  res.status(200).json({ redirect: `/api/pipeline/${req.params.id}/generate-plan`, message: 'Regeneration triggered. Call generate-plan.' });
 });
 
 // ===========================================================================
@@ -632,6 +657,7 @@ pipelineRouter.post('/:id/regenerate-plan', (req: Request, res: Response) => {
 pipelineRouter.get('/:id/assignments', async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
+  const { planRow } = result;
 
   const { rows } = await db.query(
     `SELECT a.id, a.user_id, a.module_index, a.quarter, a.due_date, a.status, a.completed_at
@@ -640,7 +666,30 @@ pipelineRouter.get('/:id/assignments', async (req: Request, res: Response) => {
      ORDER BY a.quarter, a.module_index`,
     [req.params.id],
   );
-  res.json(rows);
+
+  // Enrich each assignment row with module details from the training_plan JSONB
+  const plan = typeof planRow.training_plan === 'string'
+    ? JSON.parse(planRow.training_plan)
+    : planRow.training_plan;
+
+  const enriched = rows.map((row) => {
+    let moduleDetail: Record<string, unknown> | null = null;
+    for (const q of (plan?.quarters ?? [])) {
+      if (q.quarter === row.quarter && Array.isArray(q.modules) && q.modules[row.module_index]) {
+        moduleDetail = q.modules[row.module_index];
+        break;
+      }
+    }
+    return {
+      ...row,
+      module_name: moduleDetail?.module_name ?? `Module ${(row.module_index as number) + 1}`,
+      risk_dimension: moduleDetail?.risk_dimension ?? '',
+      amlr_article: moduleDetail?.amlr_article ?? '',
+      why_included: moduleDetail?.why_included ?? '',
+    };
+  });
+
+  res.json(enriched);
 });
 
 pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
@@ -657,7 +706,23 @@ pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
   const plan = typeof planRow.training_plan === 'string' ? JSON.parse(planRow.training_plan) : planRow.training_plan;
   const users: string[] = Array.isArray(userIds) ? userIds : [userIds];
 
-  for (const userId of users) {
+  // Resolve emails → Clerk user IDs so training.ts can match on userId
+  const resolvedUserIds: string[] = [];
+  for (const input of users) {
+    if (input.includes('@')) {
+      const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [input] });
+      if (clerkUsers.data.length > 0) {
+        resolvedUserIds.push(clerkUsers.data[0].id);
+      } else {
+        res.status(404).json({ error: `No Clerk user found for email: ${input}` });
+        return;
+      }
+    } else {
+      resolvedUserIds.push(input); // already a Clerk userId
+    }
+  }
+
+  for (const userId of resolvedUserIds) {
     for (const q of plan.quarters) {
       for (let mi = 0; mi < q.modules.length; mi++) {
         await db.query(
@@ -670,7 +735,7 @@ pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
     }
   }
 
-  res.json({ ok: true, assigned: users.length });
+  res.json({ ok: true, assigned: resolvedUserIds.length });
 });
 
 export default pipelineRouter;

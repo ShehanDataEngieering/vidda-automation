@@ -63,10 +63,10 @@ trainingRouter.patch('/my-plan/:assignmentId', async (req: Request, res: Respons
 
   const { rows } = await pool.query(
     `UPDATE plan_assignments
-     SET status = $1, completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END
+     SET status = $1, completed_at = CASE WHEN $4 = 'completed' THEN NOW() ELSE completed_at END
      WHERE id = $2 AND user_id = $3
      RETURNING id, status, completed_at`,
-    [status, req.params.assignmentId, user.userId],
+    [status, req.params.assignmentId, user.userId, status],
   );
 
   if (!rows[0]) {

@@ -68,7 +68,7 @@ export default function RoleImport() {
   const [showBatch, setShowBatch] = useState(false);
   const [batchRoles, setBatchRoles] = useState<{ title: string; description: string }[]>([]);
 
-  const REGS = ['AMLR', 'GDPR', 'MIFID2', 'KYC', 'DORA'];
+  const REGS = ['AMLR'];
 
   async function analyseRole() {
     if (!roleDescription.trim() || !planId) return;
@@ -124,11 +124,10 @@ export default function RoleImport() {
   }
 
   async function createPlanAndGo() {
-    try {
-      const res = await api('/api/pipeline', { method: 'POST' });
-      const data = await res.json() as { planId: string };
-      navigate(`/pipeline/${data.planId}`, { replace: true });
-    } catch { setError('Failed to create plan'); }
+    const res = await api('/api/pipeline', { method: 'POST' });
+    if (!res.ok) { setError('Failed to create plan'); return; }
+    const data = await res.json() as { planId: string };
+    navigate(`/pipeline/${data.planId}`, { replace: true });
   }
 
   function handleFileSelect(file: File) {
@@ -219,7 +218,8 @@ export default function RoleImport() {
                     // Create plan for first role only for now
                     if (!batchRoles[0]) return;
                     const res = await api('/api/pipeline', { method: 'POST' });
-                    const data = await res.json() as { planId: string };
+    if (!res.ok) { setError('Failed to create plan'); return; }
+    const data = await res.json() as { planId: string };
                     setRoleTitle(batchRoles[0].title);
                     setRoleDescription(batchRoles[0].description);
                     navigate(`/pipeline/${data.planId}`);

@@ -57,6 +57,8 @@ export interface PipelinePlan {
   risk_matrix: RiskDimensionScore[] | null;
   amlr_mappings: AMLRMapping[] | null;
   training_plan: TrainingPlan | null;
+  quality_score: number | null;
+  quality_breakdown: Record<string, unknown> | null;
   current_step: string;
   version: number;
   status: 'draft' | 'approved';

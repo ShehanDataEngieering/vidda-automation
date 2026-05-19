@@ -11,6 +11,10 @@ import { usersRouter } from './routes/users';
 import { pipelineRouter } from './routes/pipeline';
 import { logger } from './utils/logger';
 
+// Some environments embed the frontend in an iframe.
+// Allow same-origin framing to avoid Chrome "Unsafe attempt to load URL" errors.
+// If you deploy behind a stricter security policy, adjust accordingly.
+
 dotenv.config();
 
 const REQUIRED_ENV = ['DATABASE_URL', 'OPENROUTER_API_KEY', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 'VOYAGE_API_KEY'] as const;
@@ -24,6 +28,11 @@ const app = express();
 const PORT = process.env.PORT ?? 3001;
 
 app.use(cors());
+// Allow same-origin framing to avoid Chrome "Unsafe attempt to load URL" errors.
+app.use((_req, res, next) => {
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  next();
+});
 app.use(express.json());
 
 // HTTP request logging
@@ -38,10 +47,7 @@ app.get('/health', (_req, res) => {
 // Clerk session parsing
 app.use(clerkMiddleware());
 
-// Resolve user metadata — fills req.resolvedUser from JWT claims or Clerk API fallback
-app.use(resolveAuthUser);
-
-// Resolve user metadata — fills req.resolvedUser from JWT claims or Clerk API fallback
+// Resolve user metadata
 app.use(resolveAuthUser);
 
 // Routes
