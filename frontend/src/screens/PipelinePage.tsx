@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/react';
 import {
   Target, Plus, Users, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, ArrowRight, Calendar, BarChart3, Loader2
+  TrendingUp, ArrowRight, Calendar, BarChart3, Loader2, ShieldAlert, Zap, Lock
 } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
@@ -131,6 +131,38 @@ export default function PipelinePage() {
           </p>
         </div>
       )}
+
+      {/* ── AMLR 2027 Compliance Pitch Banner ── */}
+      <div className="mb-8 rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-slate-50 dark:from-blue-950/30 dark:to-slate-900/30 p-5">
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
+            <ShieldAlert className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-200">AMLR 2024/1624 — Compliance Deadline: 2027</h2>
+              <Badge className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 text-[10px]">Mandatory</Badge>
+            </div>
+            <p className="text-xs text-blue-800/80 dark:text-blue-300/80 leading-relaxed mb-3">
+              EU Regulation 2024/1624 Article 12 requires training to be <strong>role-specific</strong>, <strong>risk-appropriate</strong>, and <strong>documented</strong>. Generic AML e-learning given to all staff is no longer compliant. Vidda automates the mapping from job role → risk exposure → regulatory obligation → training plan — with a full audit trail for regulators.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-400">
+                <Zap className="h-3.5 w-3.5" />
+                <span>Role import → approved plan in under 5 minutes</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-400">
+                <Lock className="h-3.5 w-3.5" />
+                <span>Every module cites the exact AMLR article that mandates it</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-400">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>Human approval gate before any training is assigned</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ── Metrics Row ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

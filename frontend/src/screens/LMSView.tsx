@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Users, AlertTriangle, CheckCircle2, Clock, Circle, type LucideIcon } from 'lucide-react';
+import { Users, AlertTriangle, CheckCircle2, Clock, Circle, Info, type LucideIcon } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -74,9 +74,24 @@ export default function LMSView() {
 
       {assignments.length > 0 && (
         <Card className="shadow-sm overflow-hidden">
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/50 text-left"><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Module</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground w-12">Q</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Risk Dim</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">AMLR</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Status</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground w-28">Due</th></tr></thead><tbody>
+          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/50 text-left"><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Module &amp; Rationale</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground w-12">Q</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Risk Dim</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">AMLR</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Status</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground w-28">Due</th></tr></thead><tbody>
             {assignments.map(a => { const s = STATUS_MAP[a.status] ?? STATUS_MAP.not_started!; const Icon = s.icon; return (
-              <tr key={a.id} className="border-b hover:bg-muted/30 transition-colors"><td className="py-3 px-4 font-medium">{a.module_name}</td><td className="py-3 px-4 text-muted-foreground">{a.quarter}</td><td className="py-3 px-4"><Badge variant="outline" className="text-[10px]">{a.risk_dimension}</Badge></td><td className="py-3 px-4"><Badge variant="outline" className="text-[10px]">{a.amlr_article}</Badge></td><td className="py-3 px-4"><Badge className={`text-[10px] ${s.color}`}><Icon className="h-3 w-3 mr-1" />{s.label}</Badge></td><td className="py-3 px-4 text-muted-foreground text-xs">{a.due_date ? new Date(a.due_date).toLocaleDateString() : '—'}</td></tr>
+              <tr key={a.id} className="border-b hover:bg-muted/30 transition-colors">
+                <td className="py-3 px-4">
+                  <p className="font-medium leading-tight">{a.module_name}</p>
+                  {a.why_included && (
+                    <p className="flex items-start gap-1 mt-1 text-[11px] text-blue-600 dark:text-blue-400 leading-snug max-w-sm">
+                      <Info className="h-3 w-3 shrink-0 mt-0.5" />
+                      {a.why_included}
+                    </p>
+                  )}
+                </td>
+                <td className="py-3 px-4 text-muted-foreground">{a.quarter}</td>
+                <td className="py-3 px-4"><Badge variant="outline" className="text-[10px]">{a.risk_dimension}</Badge></td>
+                <td className="py-3 px-4"><Badge variant="outline" className="text-[10px]">{a.amlr_article}</Badge></td>
+                <td className="py-3 px-4"><Badge className={`text-[10px] ${s.color}`}><Icon className="h-3 w-3 mr-1" />{s.label}</Badge></td>
+                <td className="py-3 px-4 text-muted-foreground text-xs">{a.due_date ? new Date(a.due_date).toLocaleDateString() : '—'}</td>
+              </tr>
             );})}
           </tbody></table></div>
         </Card>

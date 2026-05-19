@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, CheckCircle2, Circle, Clock, AlertTriangle } from 'lucide-react';
+import { BookOpen, CheckCircle2, Circle, Clock, AlertTriangle, Info } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -124,11 +124,17 @@ export default function LMSDashboard() {
                   </button>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{a.module_name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <Badge variant="outline" className="text-[10px]">{a.risk_dimension}</Badge>
                       <Badge variant="outline" className="text-[10px]">{a.amlr_article}</Badge>
                       {a.due_date && <span className="text-muted-foreground">Due: {new Date(a.due_date).toLocaleDateString()}</span>}
                     </div>
+                    {a.why_included && (
+                      <p className="flex items-start gap-1 mt-1 text-[11px] text-blue-600 dark:text-blue-400 leading-snug">
+                        <Info className="h-3 w-3 shrink-0 mt-0.5" />
+                        {a.why_included}
+                      </p>
+                    )}
                   </div>
                   <Badge variant="outline" className={STATUS_COLORS[a.status] ?? ''}>
                     {a.status.replace('_', ' ')}
