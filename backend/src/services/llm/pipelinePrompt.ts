@@ -30,11 +30,12 @@ Score every role across five dimensions on a Low / Medium / High / Critical scal
 5. Escalation Risk — risk that suspicious activity is not escalated in time
 
 TRAINING STRUCTURE
-All plans follow a 4-quarter annual format:
-Q1 Foundation: core knowledge, regulatory framework, role-specific awareness
-Q2 Application: practical skills, independent work, peer review
-Q3 Deepening: advanced typologies, specialist workshops, cross-team collaboration
-Q4 Embedding: regulatory updates, full competency assessment, year 2 planning
+All plans follow a 4-quarter annual format with STRICTLY PROGRESSIVE, NON-REPEATING modules:
+Q1 Foundation: what AMLR requires and why — awareness, terminology, regulatory framework (NOT practical skills)
+Q2 Application: how to actually do the job — procedural step-by-step skills, live scenarios, decision-making in standard cases
+Q3 Deepening: hard cases — advanced typologies, complex structures, cross-border scenarios, contested escalations
+Q4 Embedding: mastery — competency assessment, regulatory updates (FATF/FCA), peer review, year-2 planning
+RULE: Each module must appear in exactly one quarter. Zero repetition across the plan.
 
 OUTPUT RULES
 1. Every training module MUST include a justification field explaining why it was assigned
@@ -107,21 +108,57 @@ Return ONLY this JSON array (no markdown, no other text):
 ]`;
 
 export const TRAINING_PLAN_USER = `Generate a 4-quarter (Q1-Q4) training plan for this role.
-Include 5-7 modules per quarter following this structure:
-- Q1 Foundation (months 1-3): core knowledge and awareness
-- Q2 Application (months 4-6): practical skills and independent work
-- Q3 Deepening (months 7-9): advanced topics and specialist knowledge
-- Q4 Embedding (months 10-12): assessment, regulatory updates, year 2 planning
+Include 5-7 modules per quarter.
 
-For each module provide:
-- module_name
-- duration_hours (estimated hours)
-- risk_dimension (which risk dimension from the risk matrix this addresses)
-- amlr_article (which AMLR article mandates or supports this module)
-- why_included (one sentence explaining WHY this module is assigned to this role specifically)
+CRITICAL RULE — ZERO REPETITION: Every single module across all 4 quarters must be UNIQUE.
+No module name, topic, or concept may appear in more than one quarter. If you covered
+"CDD measures" in Q1, you must NOT revisit it in Q2/Q3/Q4 — instead go deeper or lateral.
+Violating this rule makes the plan useless. Think of it as a 20-28 module curriculum
+that builds on itself quarter by quarter.
 
-Use the regulatory excerpt text provided to ensure accurate article references.
-Every module MUST have a why_included justification. Return ONLY valid JSON (no markdown):
+QUARTER DEFINITIONS — follow these strictly:
+
+Q1 — FOUNDATION (Months 1–3): "What and Why"
+Goal: Employee understands what AMLR requires, why it applies to their specific role,
+and can pass a basic awareness check. They are NOT yet doing independent work.
+Topics: regulatory framework overview, role-specific risk introduction, what the key
+articles mean in plain language, basic terminology (EDD, CDD, SAR, PEP, SoF, SoW),
+what happens when things go wrong (real enforcement cases).
+Do NOT assign practical skills here — this is awareness and comprehension only.
+
+Q2 — APPLICATION (Months 4–6): "How to Do It"
+Goal: Employee can independently perform the core tasks of their role under compliance standards.
+Topics: step-by-step procedural skills specific to this role (e.g. how to run a
+PEP screening check, how to complete an EDD file, how to draft a SAR), interpreting
+red flags and typologies in live scenarios, using the firm's compliance systems,
+making the right decision in ambiguous low-complexity cases.
+Do NOT repeat Q1 awareness modules — assume that knowledge is already held.
+
+Q3 — DEEPENING (Months 7–9): "Hard Cases and Edge Scenarios"
+Goal: Employee handles complex, high-pressure, or cross-border situations confidently.
+Topics: advanced money laundering typologies (trade-based ML, crypto, layering via
+real estate, PEP networks), multi-jurisdiction sanctions conflicts, complex ownership
+structures (shell companies, trusts, nominee arrangements), contested SAR decisions,
+cross-team escalation protocols, challenging customer interactions, MLRO engagement.
+These should be noticeably harder than Q2.
+
+Q4 — EMBEDDING (Months 10–12): "Mastery, Assessment and Future-Readiness"
+Goal: Employee is fully competent, can mentor others, and is ready for year 2.
+Topics: regulatory update briefings (recent FATF guidance, FCA supervisory letters,
+new AMLR technical standards), full competency assessment and gap analysis,
+peer case review (reviewing a colleague's EDD file), horizon scanning (emerging
+ML typologies for year ahead), personal development plan for year 2 training.
+Do NOT repeat Q1/Q2/Q3 topics — this is consolidation and forward planning only.
+
+EACH MODULE must include:
+- module_name (specific, descriptive — not generic like "AML Training")
+- duration_hours (realistic: awareness = 2-3h, practical skills = 4-6h, workshops = 3-4h)
+- risk_dimension (one of: AML Risk, Sanctions Risk, Fraud Risk, Documentation Risk, Escalation Risk)
+- amlr_article (the specific AMLR article that mandates or supports this training)
+- why_included (one sentence: WHY this specific module at THIS quarter for THIS role)
+
+Use the regulatory excerpts provided to ensure accurate article references.
+Return ONLY valid JSON (no markdown, no commentary):
 
 {
   "role_title": "...",
@@ -134,7 +171,7 @@ Every module MUST have a why_included justification. Return ONLY valid JSON (no 
       "modules": [
         {
           "module_name": "...",
-          "duration_hours": 4,
+          "duration_hours": 3,
           "risk_dimension": "AML Risk",
           "amlr_article": "Article 12",
           "why_included": "..."
