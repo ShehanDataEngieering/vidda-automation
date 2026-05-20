@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, Loader2, AlertTriangle, ChevronRight, CheckCircle2, Trash2, Plus, Sparkles, Info, FileText } from 'lucide-react';
+import { Calendar, Loader2, AlertTriangle, ChevronRight, CheckCircle2, Trash2, Plus, Sparkles, Info, FileText, ClipboardList, Bot, UserCheck, ShieldCheck } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,8 +28,24 @@ export default function TrainingPlanScreen() {
   const [streamText, setStreamText] = useState('');
   const [editPlan, setEditPlan] = useState<TrainingPlan | null>(null);
   const [activeQuarter, setActiveQuarter] = useState<string>('Q1');
+  const [activeTab, setActiveTab] = useState<'plan' | 'audit'>('plan');
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
 
-  async function loadPlan() { if (!planId) return; const res = await api(`/api/pipeline/${planId}`); if (res.ok) { const d = await res.json() as PipelinePlan; setPlan(d); if (d.training_plan) setEditPlan(structuredClone(d.training_plan)); } setLoading(false); }
+  interface AuditEvent {
+    id: string; version: number; step: string; action: string;
+    reviewer: string | null; note: string | null; created_at: string;
+  }
+
+  async function loadPlan() {
+    if (!planId) return;
+    const [pr, er] = await Promise.all([
+      api(`/api/pipeline/${planId}`),
+      api(`/api/pipeline/${planId}/events`),
+    ]);
+    if (pr.ok) { const d = await pr.json() as PipelinePlan; setPlan(d); if (d.training_plan) setEditPlan(structuredClone(d.training_plan)); }
+    if (er.ok) setAuditEvents(await er.json() as AuditEvent[]);
+    setLoading(false);
+  }
   useEffect(() => { void loadPlan(); }, [planId]);
 
   async function generatePlan() {
@@ -108,6 +124,57 @@ export default function TrainingPlanScreen() {
 
       {editPlan && !streaming && (
         <>
+          {/* Top tab bar: Training Plan | Audit Trail */}
+          <div className="flex gap-1 mb-6 border-b">
+            <button onClick={() => setActiveTab('plan')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-md ${activeTab === 'plan' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+              <Calendar className="h-4 w-4" /> Training Plan
+            </button>
+            <button onClick={() => setActiveTab('audit')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-md ${activeTab === 'audit' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+              <ClipboardList className="h-4 w-4" /> Audit Trail
+              <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] font-bold">{auditEvents.length}</span>
+            </button>
+          </div>
+
+          {/* Audit Trail panel */}
+          {activeTab === 'audit' && (
+            <div className="space-y-3 mb-6">
+              <p className="text-xs text-muted-foreground mb-4">
+                Full decision log for this training plan. Every AI generation, human override, and approval is recorded with a timestamp — ready for regulatory inspection under AMLR Article 9 (internal controls documentation).
+              </p>
+              {auditEvents.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No events recorded yet.</p>}
+              {auditEvents.map((ev, i) => {
+                const isAI = ev.action === 'ai_generated' || ev.action === 'regenerated';
+                const isHuman = ev.action === 'human_override';
+                const stepLabel: Record<string, string> = { role: 'Role Analysis', risk: 'Risk Assessment', amlr: 'AMLR Mapping', plan: 'Training Plan Generation' };
+                return (
+                  <div key={ev.id} className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isAI ? 'bg-violet-100 text-violet-600 dark:bg-violet-950' : isHuman ? 'bg-amber-100 text-amber-600 dark:bg-amber-950' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950'}`}>
+                        {isAI ? <Bot className="h-4 w-4" /> : isHuman ? <UserCheck className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                      </div>
+                      {i < auditEvents.length - 1 && <div className="mt-1 w-px flex-1 bg-border min-h-4" />}
+                    </div>
+                    <div className="pb-4 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{stepLabel[ev.step] ?? ev.step}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAI ? 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : isHuman ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+                          {isAI ? '🤖 AI Generated' : isHuman ? '✏️ Human Override' : '✅ Approved'}
+                        </span>
+                        <span className="text-xs text-muted-foreground ml-auto">{new Date(ev.created_at).toLocaleString()}</span>
+                      </div>
+                      {ev.reviewer && <p className="text-xs text-muted-foreground mt-0.5">By: {ev.reviewer}</p>}
+                      {ev.note && <p className="text-xs text-muted-foreground mt-0.5 italic">"{ev.note}"</p>}
+                      <p className="text-xs text-muted-foreground mt-0.5">Version {ev.version}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {activeTab === 'plan' && <>
           {/* Quality Score Badge */}
           {plan.quality_score !== null && plan.quality_score !== undefined && (
             <Card className="mb-4 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
@@ -224,6 +291,7 @@ export default function TrainingPlanScreen() {
               <Button size="lg" onClick={() => navigate(`/pipeline/${planId}/lms`)} className="gap-2">Assign Training <ChevronRight className="h-4 w-4" /></Button>
             </div>
           )}
+          </> }
         </>
       )}
     </div>

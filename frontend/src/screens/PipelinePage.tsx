@@ -282,6 +282,32 @@ export default function PipelinePage() {
             </CardContent>
           </Card>
 
+          <Card className="border-violet-200 dark:border-violet-800">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Zap className="h-4 w-4 text-violet-500" /> The Hard Problems We Solve
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs text-muted-foreground">
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">1. Free-text → Regulatory obligation</p>
+                <p>A job description is ambiguous text. We classify it into one of 5 AMLR role archetypes, score 5 risk dimensions, and map to specific articles — without hallucinating.</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">2. RAG on real regulation</p>
+                <p>Every article citation is grounded by retrieval from the actual AMLR 2024/1624 PDF. No invented obligations.</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">3. Audit trail for regulators</p>
+                <p>Every AI decision + human override is timestamped in an immutable event log — inspectable by the FCA or national supervisors.</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">4. Human-in-the-loop gates</p>
+                <p>Compliance officer must approve before anything touches employees. AI proposes; humans decide.</p>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Coverage Overview</CardTitle>

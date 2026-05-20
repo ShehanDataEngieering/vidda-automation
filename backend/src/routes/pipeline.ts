@@ -650,6 +650,21 @@ pipelineRouter.post('/:id/regenerate-plan', (req: Request, res: Response) => {
   res.status(200).json({ redirect: `/api/pipeline/${req.params.id}/generate-plan`, message: 'Regeneration triggered. Call generate-plan.' });
 });
 
+// Audit trail — full event log for a plan (for regulators and demo)
+pipelineRouter.get('/:id/events', async (req: Request, res: Response) => {
+  const result = await getScopedPlan(req, res);
+  if (!result) return;
+
+  const { rows } = await db.query(
+    `SELECT id, version, step, action, reviewer, note, created_at
+     FROM plan_events
+     WHERE plan_id = $1
+     ORDER BY created_at ASC`,
+    [req.params.id],
+  );
+  res.json(rows);
+});
+
 // ===========================================================================
 // Step 7: LMS Assignment
 // ===========================================================================
