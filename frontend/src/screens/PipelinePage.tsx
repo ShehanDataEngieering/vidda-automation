@@ -252,7 +252,12 @@ export default function PipelinePage() {
                           <td className="px-6 py-3"><span className="text-xs text-muted-foreground">{stepLabel[plan.current_step] ?? plan.current_step}</span></td>
                           <td className="px-6 py-3 text-xs text-muted-foreground">{new Date(plan.updated_at).toLocaleDateString()}</td>
                           <td className="px-6 py-3 text-right">
-                            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate(`/pipeline/${plan.id}`)}>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                              const stepPath: Record<string, string> = {
+                                created: '', role: '', risk: '/risk', amlr: '/amlr', plan: '/plan', lms: '/lms',
+                              };
+                              navigate(`/pipeline/${plan.id}${stepPath[plan.current_step] ?? ''}`);
+                            }}>
                               Open <ArrowRight className="h-3 w-3" />
                             </Button>
                           </td>

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   FileText, Loader2, Target, AlertTriangle, Sparkles,
@@ -48,6 +48,27 @@ export default function RoleImport() {
   const navigate = useNavigate();
   const api = useApi();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // ── Redirect if plan is already at a later step ──
+  useEffect(() => {
+    if (!planId) return;
+    void api(`/api/pipeline/${planId}`).then(async (res) => {
+      if (!res.ok) return;
+      const plan = await res.json() as { current_step: string; status: string };
+      const stepPath: Record<string, string> = {
+        risk: `/pipeline/${planId}/risk`,
+        amlr: `/pipeline/${planId}/amlr`,
+        plan: `/pipeline/${planId}/plan`,
+        lms: `/pipeline/${planId}/lms`,
+      };
+      if (plan.status === 'approved') {
+        navigate(`/pipeline/${planId}/plan`, { replace: true });
+      } else if (stepPath[plan.current_step]) {
+        navigate(stepPath[plan.current_step]!, { replace: true });
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId]);
 
   // ── Form state ──
   const [roleTitle, setRoleTitle] = useState('');
