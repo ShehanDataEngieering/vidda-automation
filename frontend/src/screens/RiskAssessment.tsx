@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
 import { RISK_DIMENSION_META, DEFAULT_RISK_DIMENSION_META } from '@/lib/riskDimensions';
+import { brand } from '@/lib/brand';
 import type { PipelinePlan } from '../types-v6';
 
 const SEVERITY_ORDER = ['Low', 'Medium', 'High', 'Critical'] as const;
@@ -136,8 +137,8 @@ export default function RiskAssessment() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-            <Shield className="h-5 w-5 text-white dark:text-slate-900" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+            <Shield className="h-5 w-5" style={{ color: brand.amber }} />
           </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">Risk Assessment</h1>

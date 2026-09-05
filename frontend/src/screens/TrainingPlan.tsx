@@ -12,6 +12,7 @@ import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
 import ComparisonView from '../components/ComparisonView';
 import { printAuditReport } from '../utils/pdfExport';
 import { RISK_DIMENSION_META, DEFAULT_RISK_DIMENSION_META } from '@/lib/riskDimensions';
+import { brand } from '@/lib/brand';
 import type { PipelinePlan, TrainingPlan, TrainingModulePlan, PipelineSseEvent } from '../types-v6';
 
 const QUARTER_NAMES: Record<string, string> = { Q1: 'Foundation', Q2: 'Application', Q3: 'Deepening', Q4: 'Embedding' };
@@ -100,7 +101,7 @@ export default function TrainingPlanScreen() {
   return (
     <div className="p-8 max-w-5xl mx-auto animate-in fade-in duration-300">
       <PipelineStepper steps={PIPELINE_STEPS} currentStep="plan" onNavigate={(path) => navigate(`/pipeline/${planId}${path}`)} />
-      <div className="mb-8"><div className="flex items-center gap-3 mb-1"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20"><Calendar className="h-5 w-5 text-primary" /></div><div><h1 className="text-xl font-semibold tracking-tight">Training Plan</h1><p className="text-sm text-muted-foreground">{isApproved ? 'Approved' : '4-quarter AMLR compliance training plan'} — {plan.role_title}</p></div></div></div>
+      <div className="mb-8"><div className="flex items-center gap-3 mb-1"><div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: brand.espresso }}><Calendar className="h-5 w-5" style={{ color: brand.amber }} /></div><div><h1 className="text-xl font-semibold tracking-tight">Training Plan</h1><p className="text-sm text-muted-foreground">{isApproved ? 'Approved' : '4-quarter AMLR compliance training plan'} — {plan.role_title}</p></div></div></div>
       {error && <div className="flex items-center gap-2 p-4 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-sm mb-6"><AlertTriangle className="h-4 w-4" /> {error}</div>}
       {warnings.length > 0 && <Card className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"><CardContent className="py-3 space-y-1">{warnings.map((w,i)=><p key={i} className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2"><AlertTriangle className="h-3 w-3" /> {w}</p>)}</CardContent></Card>}
 

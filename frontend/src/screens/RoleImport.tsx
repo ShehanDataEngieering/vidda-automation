@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
+import { brand } from '@/lib/brand';
 import type { RoleProfileV6 } from '../types-v6';
 import { DEMO_ROLE_DESCRIPTION } from '../demo-script';
 
@@ -178,8 +179,8 @@ export default function RoleImport() {
     return (
       <div className="p-8 max-w-2xl mx-auto">
         <div className="text-center mb-10">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 dark:bg-slate-100 mx-auto mb-4">
-            <Target className="h-7 w-7 text-white dark:text-slate-900" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl mx-auto mb-4" style={{ background: brand.espresso }}>
+            <Target className="h-7 w-7" style={{ color: brand.amber }} />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight mb-2">AMLR Training Pipeline</h1>
           <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
@@ -271,8 +272,8 @@ export default function RoleImport() {
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-          <Target className="h-5 w-5 text-white dark:text-slate-900" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+          <Target className="h-5 w-5" style={{ color: brand.amber }} />
         </div>
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Role Import &amp; Analysis</h1>

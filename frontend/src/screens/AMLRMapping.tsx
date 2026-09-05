@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
+import { brand } from '@/lib/brand';
 import type { PipelinePlan, AMLRMapping } from '../types-v6';
 
 const ARTICLE_CATEGORIES: Record<string, string> = {
@@ -192,8 +193,8 @@ export default function AMLRMappingScreen() {
 
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-            <BookOpen className="h-5 w-5 text-white dark:text-slate-900" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+            <BookOpen className="h-5 w-5" style={{ color: brand.amber }} />
           </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">AMLR Article Mapping</h1>

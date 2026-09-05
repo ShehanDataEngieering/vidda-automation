@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { brand } from '@/lib/brand';
 
 const EMPLOYEE_ROLES = [
   'Front Office',
@@ -138,8 +139,8 @@ export default function UserManagement() {
     <div className="p-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-          <Users className="h-5 w-5 text-white dark:text-slate-900" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+          <Users className="h-5 w-5" style={{ color: brand.amber }} />
         </div>
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Team Management</h1>

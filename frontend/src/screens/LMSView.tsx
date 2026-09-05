@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { StatCard } from '@/components/ui/stat-card';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
 import { ASSIGNMENT_STATUS } from '@/lib/statusStyles';
+import { brand } from '@/lib/brand';
 import type { PipelinePlan } from '../types-v6';
 
 interface AssignmentRow { id: string; plan_id: string; user_id: string; module_index: number; quarter: string; due_date: string | null; status: string; completed_at: string | null; role_title: string; module_name: string; risk_dimension: string; amlr_article: string; why_included: string; }
@@ -43,8 +44,8 @@ export default function LMSView() {
       <PipelineStepper steps={PIPELINE_STEPS} currentStep="lms" onNavigate={(path) => navigate(`/pipeline/${planId}${path}`)} />
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-1">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-            <Users className="h-5 w-5 text-white dark:text-slate-900" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+            <Users className="h-5 w-5" style={{ color: brand.amber }} />
           </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">LMS Assignment — {plan.role_title}</h1>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ASSIGNMENT_STATUS } from '@/lib/statusStyles';
+import { brand } from '@/lib/brand';
 
 interface AssignmentRow {
   id: string;
@@ -61,8 +62,8 @@ export default function LMSDashboard() {
   return (
     <div className="p-6 max-w-4xl">
       <div className="flex items-center gap-3 mb-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-          <BookOpen className="h-5 w-5 text-white dark:text-slate-900" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+          <BookOpen className="h-5 w-5" style={{ color: brand.amber }} />
         </div>
         <div>
           <h1 className="text-xl font-semibold tracking-tight">My Training Plan — {roleTitle}</h1>
