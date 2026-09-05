@@ -2,24 +2,16 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Shield, Loader2, AlertTriangle, ChevronRight, Sparkles, Gauge,
-  Activity, Landmark, Ban, FileCheck, ArrowUpCircle,
-  X, BarChart3, SlidersHorizontal
+  BarChart3, SlidersHorizontal
 } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
+import { RISK_DIMENSION_META, DEFAULT_RISK_DIMENSION_META } from '@/lib/riskDimensions';
 import type { PipelinePlan } from '../types-v6';
-
-/* ── Lucide icons per dimension ── */
-const DIM_META: Record<string, { icon: typeof Activity; color: string }> = {
-  'AML Risk':          { icon: Landmark,  color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40' },
-  'Sanctions Risk':    { icon: Ban,      color: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40' },
-  'Fraud Risk':        { icon: Activity,  color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40' },
-  'Documentation Risk':{ icon: FileCheck, color: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40' },
-  'Escalation Risk':   { icon: ArrowUpCircle, color: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40' },
-};
 
 const SEVERITY_ORDER = ['Low', 'Medium', 'High', 'Critical'] as const;
 const SEVERITY_CFG: Record<string, {
@@ -224,7 +216,7 @@ export default function RiskAssessment() {
             </div>
             {/* Dimension rows */}
             {riskMatrix.map(dim => {
-              const meta = DIM_META[dim.dimension] ?? { icon: Activity, color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/40' };
+              const meta = RISK_DIMENSION_META[dim.dimension] ?? DEFAULT_RISK_DIMENSION_META;
               const Icon = meta.icon;
               return (
                 <div key={dim.dimension} className="grid grid-cols-[160px_repeat(4,1fr)] gap-1 mb-1">
@@ -274,7 +266,7 @@ export default function RiskAssessment() {
       {hasRiskMatrix && viewMode === 'cards' && (
         <div className="grid grid-cols-1 gap-4 mb-6">
           {sortedDims.map(dim => {
-            const meta = DIM_META[dim.dimension] ?? { icon: Activity, color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/40' };
+            const meta = RISK_DIMENSION_META[dim.dimension] ?? DEFAULT_RISK_DIMENSION_META;
             const Icon = meta.icon;
             const cfg = SEVERITY_CFG[dim.score]!;
             return (
@@ -327,65 +319,62 @@ export default function RiskAssessment() {
       )}
 
       {/* ── Override Modal ── */}
-      {modalDim && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 animate-in fade-in duration-150">
-          <div className="bg-background border border-border rounded-xl shadow-lg w-full max-w-lg p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Override: {modalDim}</h3>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setModalDim(null)}><X className="h-4 w-4" /></Button>
-            </div>
+      <Dialog open={!!modalDim} onOpenChange={(open) => { if (!open) setModalDim(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Override: {modalDim}</DialogTitle>
+          </DialogHeader>
 
-            <div className="mb-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Current Score</p>
-              <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                {riskMatrix.find(d => d.dimension === modalDim)?.score} — {riskMatrix.find(d => d.dimension === modalDim)?.justification}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">New Score</p>
-              <div className="grid grid-cols-4 gap-2">
-                {SEVERITY_ORDER.map(sev => {
-                  const cfg = SEVERITY_CFG[sev]!;
-                  return (
-                    <button key={sev}
-                      onClick={() => setModalScore(sev)}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all ${
-                        modalScore === sev
-                          ? `${cfg.bgLight} ${cfg.bgDark} ${cfg.border} shadow-sm ring-1 ring-primary`
-                          : 'border-muted hover:border-muted-foreground/30 bg-muted/20'
-                      }`}
-                    >
-                      <div className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
-                      <span className={`text-xs font-semibold ${cfg.color}`}>{sev}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Audit Note</p>
-              <textarea
-                value={modalNote}
-                onChange={e => setModalNote(e.target.value)}
-                placeholder="Why is this override necessary? (Required for audit trail)"
-                className="w-full min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setModalDim(null)}>Cancel</Button>
-              <Button
-                disabled={!modalNote.trim() || saving}
-                onClick={() => saveOverride(modalDim, modalScore, modalNote)}
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Override'}
-              </Button>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Current Score</p>
+            <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+              {riskMatrix.find(d => d.dimension === modalDim)?.score} — {riskMatrix.find(d => d.dimension === modalDim)?.justification}
             </div>
           </div>
-        </div>
-      )}
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">New Score</p>
+            <div className="grid grid-cols-4 gap-2">
+              {SEVERITY_ORDER.map(sev => {
+                const cfg = SEVERITY_CFG[sev]!;
+                return (
+                  <button key={sev}
+                    onClick={() => setModalScore(sev)}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all ${
+                      modalScore === sev
+                        ? `${cfg.bgLight} ${cfg.bgDark} ${cfg.border} shadow-sm ring-1 ring-primary`
+                        : 'border-muted hover:border-muted-foreground/30 bg-muted/20'
+                    }`}
+                  >
+                    <div className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
+                    <span className={`text-xs font-semibold ${cfg.color}`}>{sev}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Audit Note</p>
+            <textarea
+              value={modalNote}
+              onChange={e => setModalNote(e.target.value)}
+              placeholder="Why is this override necessary? (Required for audit trail)"
+              className="w-full min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalDim(null)}>Cancel</Button>
+            <Button
+              disabled={!modalNote.trim() || saving || !modalDim}
+              onClick={() => modalDim && saveOverride(modalDim, modalScore, modalNote)}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Override'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

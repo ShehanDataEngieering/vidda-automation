@@ -126,4 +126,38 @@ describe('RiskAssessment — With risk data', () => {
       expect(screen.getByText('Heatmap')).toBeInTheDocument();
     });
   });
+
+  it('opens the override dialog and saves an override', async () => {
+    mockFetch([
+      {
+        method: 'GET', path: '/api/pipeline/rp-3', response: {
+          ...PLAN_BASE, id: 'rp-3', risk_matrix: RISK_MATRIX.slice(0, 2),
+        },
+      },
+      {
+        method: 'PATCH', path: '/api/pipeline/rp-3/risk',
+        response: { riskMatrix: RISK_MATRIX.slice(0, 2), version: 2 },
+      },
+    ]);
+
+    render(<TestWrapper route="/pipeline/rp-3/risk" pattern="/pipeline/:planId/risk"><RiskAssessment /></TestWrapper>);
+    await waitFor(() => screen.getByText('Risk Heatmap'));
+
+    // Card view exposes a labeled "Override" button per dimension.
+    await userEvent.click(screen.getByText('Card View'));
+    const overrideButtons = await screen.findAllByRole('button', { name: /override/i });
+    await userEvent.click(overrideButtons[0]!);
+
+    await screen.findByRole('dialog');
+
+    await userEvent.type(screen.getByPlaceholderText(/why is this override necessary/i), 'Reviewed by compliance.');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Override' }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/rp-3/risk'),
+        expect.objectContaining({ method: 'PATCH' })
+      );
+    });
+  });
 });

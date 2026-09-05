@@ -6,14 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
 import ComparisonView from '../components/ComparisonView';
 import { printAuditReport } from '../utils/pdfExport';
+import { RISK_DIMENSION_META, DEFAULT_RISK_DIMENSION_META } from '@/lib/riskDimensions';
 import type { PipelinePlan, TrainingPlan, TrainingModulePlan, PipelineSseEvent } from '../types-v6';
 
 const QUARTER_NAMES: Record<string, string> = { Q1: 'Foundation', Q2: 'Application', Q3: 'Deepening', Q4: 'Embedding' };
 const QUARTER_ICONS: Record<string, string> = { Q1: 'F', Q2: 'A', Q3: 'D', Q4: 'E' };
-const RISK_COLORS: Record<string, string> = { 'AML Risk': 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300', 'Sanctions Risk': 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300', 'Fraud Risk': 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', 'Documentation Risk': 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300', 'Escalation Risk': 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' };
 
 export default function TrainingPlanScreen() {
   const { planId } = useParams<{ planId: string }>();
@@ -27,7 +29,7 @@ export default function TrainingPlanScreen() {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [editPlan, setEditPlan] = useState<TrainingPlan | null>(null);
-  const [activeQuarter, setActiveQuarter] = useState<string>('Q1');
+  const [activeQuarter, setActiveQuarter] = useState<'Q1' | 'Q2' | 'Q3' | 'Q4'>('Q1');
   const [activeTab, setActiveTab] = useState<'plan' | 'audit'>('plan');
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
 
@@ -123,64 +125,57 @@ export default function TrainingPlanScreen() {
       )}
 
       {editPlan && !streaming && (
-        <>
-          {/* Top tab bar: Training Plan | Audit Trail */}
-          <div className="flex gap-1 mb-6 border-b">
-            <button onClick={() => setActiveTab('plan')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-md ${activeTab === 'plan' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-              <Calendar className="h-4 w-4" /> Training Plan
-            </button>
-            <button onClick={() => setActiveTab('audit')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-md ${activeTab === 'audit' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'plan' | 'audit')}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="plan"><Calendar className="h-4 w-4" /> Training Plan</TabsTrigger>
+            <TabsTrigger value="audit">
               <ClipboardList className="h-4 w-4" /> Audit Trail
               <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] font-bold">{auditEvents.length}</span>
-            </button>
-          </div>
+            </TabsTrigger>
+          </TabsList>
 
           {/* Audit Trail panel */}
-          {activeTab === 'audit' && (
-            <div className="space-y-3 mb-6">
-              <p className="text-xs text-muted-foreground mb-4">
-                Full decision log for this training plan. Every AI generation, human override, and approval is recorded with a timestamp — ready for regulatory inspection under AMLR Article 9 (internal controls documentation).
-              </p>
-              {auditEvents.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No events recorded yet.</p>}
-              {auditEvents.map((ev, i) => {
-                const isAI = ev.action === 'ai_generated' || ev.action === 'regenerated';
-                const isHuman = ev.action === 'human_override';
-                const stepLabel: Record<string, string> = { role: 'Role Analysis', risk: 'Risk Assessment', amlr: 'AMLR Mapping', plan: 'Training Plan Generation' };
-                return (
-                  <div key={ev.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isAI ? 'bg-violet-100 text-violet-600 dark:bg-violet-950' : isHuman ? 'bg-amber-100 text-amber-600 dark:bg-amber-950' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950'}`}>
-                        {isAI ? <Bot className="h-4 w-4" /> : isHuman ? <UserCheck className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-                      </div>
-                      {i < auditEvents.length - 1 && <div className="mt-1 w-px flex-1 bg-border min-h-4" />}
+          <TabsContent value="audit" className="space-y-3 mt-0">
+            <p className="text-xs text-muted-foreground mb-4">
+              Full decision log for this training plan. Every AI generation, human override, and approval is recorded with a timestamp — ready for regulatory inspection under AMLR Article 9 (internal controls documentation).
+            </p>
+            {auditEvents.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No events recorded yet.</p>}
+            {auditEvents.map((ev, i) => {
+              const isAI = ev.action === 'ai_generated' || ev.action === 'regenerated';
+              const isHuman = ev.action === 'human_override';
+              const stepLabel: Record<string, string> = { role: 'Role Analysis', risk: 'Risk Assessment', amlr: 'AMLR Mapping', plan: 'Training Plan Generation' };
+              return (
+                <div key={ev.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isAI ? 'bg-violet-100 text-violet-600 dark:bg-violet-950' : isHuman ? 'bg-amber-100 text-amber-600 dark:bg-amber-950' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950'}`}>
+                      {isAI ? <Bot className="h-4 w-4" /> : isHuman ? <UserCheck className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
                     </div>
-                    <div className="pb-4 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">{stepLabel[ev.step] ?? ev.step}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAI ? 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : isHuman ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'}`}>
-                          {isAI ? '🤖 AI Generated' : isHuman ? '✏️ Human Override' : '✅ Approved'}
-                        </span>
-                        <span className="text-xs text-muted-foreground ml-auto">{new Date(ev.created_at).toLocaleString()}</span>
-                      </div>
-                      {ev.reviewer && <p className="text-xs text-muted-foreground mt-0.5">By: {ev.reviewer}</p>}
-                      {ev.note && <p className="text-xs text-muted-foreground mt-0.5 italic">"{ev.note}"</p>}
-                      <p className="text-xs text-muted-foreground mt-0.5">Version {ev.version}</p>
-                    </div>
+                    {i < auditEvents.length - 1 && <div className="mt-1 w-px flex-1 bg-border min-h-4" />}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div className="pb-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{stepLabel[ev.step] ?? ev.step}</span>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAI ? 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : isHuman ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+                        {isAI ? '🤖 AI Generated' : isHuman ? '✏️ Human Override' : '✅ Approved'}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-auto">{new Date(ev.created_at).toLocaleString()}</span>
+                    </div>
+                    {ev.reviewer && <p className="text-xs text-muted-foreground mt-0.5">By: {ev.reviewer}</p>}
+                    {ev.note && <p className="text-xs text-muted-foreground mt-0.5 italic">"{ev.note}"</p>}
+                    <p className="text-xs text-muted-foreground mt-0.5">Version {ev.version}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </TabsContent>
 
-          {activeTab === 'plan' && <>
+          <TabsContent value="plan" className="mt-0">
           {/* Quality Score Badge */}
           {plan.quality_score !== null && plan.quality_score !== undefined && (
             <Card className="mb-4 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
               <CardContent className="py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold ${plan.quality_score >= 80 ? 'bg-emerald-100 text-emerald-700' : plan.quality_score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold ${plan.quality_score >= 80 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : plan.quality_score >= 60 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>
                     {plan.quality_score}
                   </div>
                   <div>
@@ -189,7 +184,7 @@ export default function TrainingPlanScreen() {
                   </div>
                 </div>
                 {Array.isArray(plan.quality_breakdown?.warnings) && (plan.quality_breakdown.warnings as string[]).length > 0 && (
-                  <div className="text-xs text-amber-600">
+                  <div className="text-xs text-amber-600 dark:text-amber-400">
                     {(plan.quality_breakdown.warnings as string[]).length} warning(s)
                   </div>
                 )}
@@ -208,71 +203,84 @@ export default function TrainingPlanScreen() {
           </Card>
 
           {/* Quarter tabs */}
-          <div className="flex gap-1 mb-6 border-b">
+          <Tabs value={activeQuarter} onValueChange={(v) => setActiveQuarter(v as 'Q1' | 'Q2' | 'Q3' | 'Q4')}>
+            <TabsList className="mb-6">
+              {(['Q1','Q2','Q3','Q4'] as const).map(q => {
+                const qIdx = q === 'Q1' ? 0 : q === 'Q2' ? 1 : q === 'Q3' ? 2 : 3;
+                const modules = editPlan.quarters[qIdx]?.modules ?? [];
+                return (
+                  <TabsTrigger key={q} value={q}>
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold">{QUARTER_ICONS[q]}</span> {q} {QUARTER_NAMES[q]} <Badge variant="secondary" className="text-[10px] ml-1">{modules.length}</Badge>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+
             {(['Q1','Q2','Q3','Q4'] as const).map(q => {
               const qIdx = q === 'Q1' ? 0 : q === 'Q2' ? 1 : q === 'Q3' ? 2 : 3;
               const modules = editPlan.quarters[qIdx]?.modules ?? [];
-              const active = activeQuarter === q;
+
               return (
-                <button key={q} onClick={() => setActiveQuarter(q)}
-                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-md ${
-                    active ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
-                  }`}>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold">{QUARTER_ICONS[q]}</span> {q} {QUARTER_NAMES[q]} <Badge variant="secondary" className="text-[10px] ml-1">{modules.length}</Badge>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active quarter modules */}
-          {(['Q1','Q2','Q3','Q4'] as const).filter(q => q === activeQuarter).map(q => {
-            const qIdx = q === 'Q1' ? 0 : q === 'Q2' ? 1 : q === 'Q3' ? 2 : 3;
-            const modules = editPlan.quarters[qIdx]?.modules ?? [];
-
-            return (
-              <Card key={q} className="shadow-sm mb-4">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold mr-1">{QUARTER_ICONS[q]}</span> {q} — {QUARTER_NAMES[q]}</CardTitle>
-                    {!isApproved && <Button variant="ghost" size="sm" onClick={() => addModule(qIdx)}><Plus className="h-4 w-4" /></Button>}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{editPlan.quarters[qIdx]?.months}</p>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {modules.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No modules in this quarter yet.</p>}
-                  {modules.map((m, mIdx) => {
-                    return (
-                      <div key={mIdx} className="rounded-lg border p-4 text-sm bg-background hover:border-primary/20 transition-colors group">
-                        <div className="flex items-start gap-3">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0 mt-0.5">{mIdx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Input value={m.module_name} onChange={e => updateModule(qIdx, mIdx, 'module_name', e.target.value)} disabled={isApproved} className="h-7 text-sm font-semibold border-none bg-transparent px-0 flex-1" />
-                              <Badge variant="outline" className="text-[10px] shrink-0">{m.duration_hours}h</Badge>
-                              <Badge variant="outline" className={`text-[10px] shrink-0 ${RISK_COLORS[m.risk_dimension] ?? ''}`}>{m.risk_dimension}</Badge>
-                              <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-[10px] shrink-0">{m.amlr_article}</Badge>
-                            </div>
-                            {/* Why included: ALWAYS visible - jury's #1 criterion */}
-                            <div className="mt-2 p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
-                                <Info className="h-3 w-3 text-blue-500" /> Why included
-                              </p>
-                              {isApproved ? (
-                                <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{m.why_included}</p>
-                              ) : (
-                                <Input value={m.why_included} onChange={e => updateModule(qIdx, mIdx, 'why_included', e.target.value)} className="h-7 text-xs border-none bg-transparent px-0 text-blue-700 dark:text-blue-300" />
+                <TabsContent key={q} value={q} className="mt-0">
+                  <Card className="shadow-sm mb-4">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold mr-1">{QUARTER_ICONS[q]}</span> {q} — {QUARTER_NAMES[q]}</CardTitle>
+                        {!isApproved && <Button variant="ghost" size="sm" onClick={() => addModule(qIdx)}><Plus className="h-4 w-4" /></Button>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{editPlan.quarters[qIdx]?.months}</p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {modules.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No modules in this quarter yet.</p>}
+                      {modules.map((m, mIdx) => {
+                        const riskMeta = RISK_DIMENSION_META[m.risk_dimension] ?? DEFAULT_RISK_DIMENSION_META;
+                        return (
+                          <div key={mIdx} className="rounded-lg border p-4 text-sm bg-background hover:border-primary/20 transition-colors group">
+                            <div className="flex items-start gap-3">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0 mt-0.5">{mIdx + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Input value={m.module_name} onChange={e => updateModule(qIdx, mIdx, 'module_name', e.target.value)} disabled={isApproved} className="h-7 text-sm font-semibold border-none bg-transparent px-0 flex-1" />
+                                  <Badge variant="outline" className="text-[10px] shrink-0">{m.duration_hours}h</Badge>
+                                  <Badge variant="outline" className={`text-[10px] shrink-0 ${riskMeta.badgeClass}`}>{m.risk_dimension}</Badge>
+                                  <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-[10px] shrink-0">{m.amlr_article}</Badge>
+                                </div>
+                                {/* Why included: ALWAYS visible - jury's #1 criterion */}
+                                <div className="mt-2 p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
+                                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
+                                    <Info className="h-3 w-3 text-blue-500" /> Why included
+                                  </p>
+                                  {isApproved ? (
+                                    <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{m.why_included}</p>
+                                  ) : (
+                                    <Input value={m.why_included} onChange={e => updateModule(qIdx, mIdx, 'why_included', e.target.value)} className="h-7 text-xs border-none bg-transparent px-0 text-blue-700 dark:text-blue-300" />
+                                  )}
+                                </div>
+                              </div>
+                              {!isApproved && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={() => removeModule(qIdx, mIdx)}
+                                      aria-label="Remove module"
+                                      className="shrink-0 text-muted-foreground/30 hover:text-destructive transition-colors mt-1 opacity-0 group-hover:opacity-100"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Remove module</TooltipContent>
+                                </Tooltip>
                               )}
                             </div>
                           </div>
-                          {!isApproved && <button onClick={() => removeModule(qIdx, mIdx)} className="shrink-0 text-muted-foreground/30 hover:text-destructive transition-colors mt-1 opacity-0 group-hover:opacity-100"><Trash2 className="h-4 w-4" /></button>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            );
-          })}
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              );
+            })}
+          </Tabs>
 
           {/* Gate 3 controls */}
           {!isApproved && (
@@ -284,15 +292,15 @@ export default function TrainingPlanScreen() {
           )}
           {isApproved && (
             <div className="flex items-center gap-3 pt-2">
-              <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 text-sm px-4 py-2"><CheckCircle2 className="h-4 w-4 mr-1" /> Approved</Badge>
+              <Badge variant="success" className="text-sm px-4 py-2"><CheckCircle2 className="h-4 w-4 mr-1" /> Approved</Badge>
               <Button variant="outline" size="lg" onClick={() => plan && printAuditReport(plan)} className="gap-2">
                 <FileText className="h-4 w-4" /> Export Audit PDF
               </Button>
               <Button size="lg" onClick={() => navigate(`/pipeline/${planId}/lms`)} className="gap-2">Assign Training <ChevronRight className="h-4 w-4" /></Button>
             </div>
           )}
-          </> }
-        </>
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );

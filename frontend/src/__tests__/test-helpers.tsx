@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 /**
  * Mock Clerk — must be set before any component uses @clerk/react
@@ -88,10 +89,12 @@ export function TestWrapper({
 }) {
   const p = pattern ?? route;
   return (
-    <MemoryRouter initialEntries={[route]}>
-      <Routes>
-        <Route path={p} element={children} />
-      </Routes>
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter initialEntries={[route]}>
+        <Routes>
+          <Route path={p} element={children} />
+        </Routes>
+      </MemoryRouter>
+    </TooltipProvider>
   );
 }

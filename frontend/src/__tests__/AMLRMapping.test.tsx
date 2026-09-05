@@ -1,7 +1,7 @@
 /**
  * AMLRMapping — Filter, Export, Article Map Tests
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockClerk, mockFetch, TestWrapper } from './test-helpers';
 
@@ -116,5 +116,35 @@ describe('AMLRMapping — With mappings', () => {
     render(<TestWrapper route="/pipeline/ap-2/amlr" pattern="/pipeline/:planId/amlr"><AMLRMappingScreen /></TestWrapper>);
     await waitFor(() => screen.getByText('Customer Due Diligence'));
     expect(screen.getByText('Export')).toBeInTheDocument();
+  });
+
+  it('confirms before regenerating and only calls the API after confirming', async () => {
+    mockFetch([
+      {
+        method: 'GET', path: '/api/pipeline/ap-3', response: {
+          ...PLAN_BASE, id: 'ap-3', amlr_mappings: MOCK_MAPPINGS,
+        },
+      },
+      {
+        method: 'POST', path: '/api/pipeline/ap-3/regenerate-amlr',
+        response: { amlrMappings: MOCK_MAPPINGS },
+      },
+    ]);
+
+    render(<TestWrapper route="/pipeline/ap-3/amlr" pattern="/pipeline/:planId/amlr"><AMLRMappingScreen /></TestWrapper>);
+    await waitFor(() => screen.getByText('Customer Due Diligence'));
+
+    await userEvent.click(screen.getByRole('button', { name: /regenerate/i }));
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/regenerate-amlr'), expect.anything());
+
+    const alertDialog = await screen.findByRole('alertdialog');
+    await userEvent.click(within(alertDialog).getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/regenerate-amlr'),
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
   });
 });

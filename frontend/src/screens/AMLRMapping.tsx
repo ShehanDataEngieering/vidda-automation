@@ -9,6 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
 import type { PipelinePlan, AMLRMapping } from '../types-v6';
 
@@ -80,6 +85,7 @@ export default function AMLRMappingScreen() {
 
   const [editMappings, setEditMappings] = useState<AMLRMapping[]>([]);
   const [saving, setSaving] = useState(false);
+  const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
 
   async function loadPlan() {
     if (!planId) return;
@@ -122,7 +128,7 @@ export default function AMLRMappingScreen() {
   }
 
   function regenerateAMLR() {
-    if (!confirm('Regenerating will replace all current mappings with AI-generated ones. Continue?')) return;
+    setConfirmRegenOpen(false);
     setMapping(true); setError('');
     api(`/api/pipeline/${planId}/regenerate-amlr`, { method: 'POST' })
       .then(async res => {
@@ -207,7 +213,7 @@ export default function AMLRMappingScreen() {
               }}>
               <FileDown className="h-3.5 w-3.5" /> Export
             </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={regenerateAMLR} disabled={mapping}>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setConfirmRegenOpen(true)} disabled={mapping}>
               <RotateCcw className="h-3.5 w-3.5" /> Regenerate
             </Button>
           </div>
@@ -302,9 +308,18 @@ export default function AMLRMappingScreen() {
                           <p className="text-xs text-muted-foreground">{m.article} · {ARTICLE_CATEGORIES[m.article] ?? 'Other'}</p>
                         </div>
                       </div>
-                      <button onClick={() => removeMapping(originalIdx)} className="shrink-0 text-muted-foreground/30 hover:text-destructive transition-colors mt-1 opacity-0 group-hover:opacity-100">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => removeMapping(originalIdx)}
+                            aria-label="Remove mapping"
+                            className="shrink-0 text-muted-foreground/30 hover:text-destructive transition-colors mt-1 opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Remove mapping</TooltipContent>
+                      </Tooltip>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0 pb-4 space-y-3">
@@ -337,6 +352,26 @@ export default function AMLRMappingScreen() {
           </div>
         </>
       )}
+
+      <AlertDialog open={confirmRegenOpen} onOpenChange={setConfirmRegenOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate AMLR mappings?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This replaces all current mappings with AI-generated ones. Any manual edits will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={regenerateAMLR}
+              className="bg-destructive text-destructive-foreground shadow hover:bg-destructive/90"
+            >
+              Regenerate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

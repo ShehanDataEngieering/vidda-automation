@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, CheckCircle2, Circle, Clock, AlertTriangle, Info } from 'lucide-react';
+import { BookOpen, AlertTriangle, Info } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { ASSIGNMENT_STATUS } from '@/lib/statusStyles';
 
 interface AssignmentRow {
   id: string;
@@ -19,12 +20,6 @@ interface AssignmentRow {
   amlr_article: string;
   why_included: string;
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  completed: 'bg-green-100 text-green-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  not_started: 'bg-gray-100 text-gray-500',
-};
 
 export default function LMSDashboard() {
   const api = useApi();
@@ -107,40 +102,37 @@ export default function LMSDashboard() {
               <CardTitle className="text-sm">{q} — {qDone}/{qAssignments.length} complete</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {qAssignments.map(a => (
-                <div key={a.id} className="flex items-center gap-3 py-2 px-3 rounded-md border text-xs">
-                  <button
-                    onClick={() => updateStatus(a.id, a.status === 'completed' ? 'in_progress' : 'completed')}
-                    disabled={updating.has(a.id)}
-                    className="shrink-0"
-                  >
-                    {a.status === 'completed' ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    ) : a.status === 'in_progress' ? (
-                      <Clock className="h-5 w-5 text-amber-600" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground/30" />
-                    )}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium">{a.module_name}</p>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <Badge variant="outline" className="text-[10px]">{a.risk_dimension}</Badge>
-                      <Badge variant="outline" className="text-[10px]">{a.amlr_article}</Badge>
-                      {a.due_date && <span className="text-muted-foreground">Due: {new Date(a.due_date).toLocaleDateString()}</span>}
+              {qAssignments.map(a => {
+                const s = ASSIGNMENT_STATUS[a.status] ?? ASSIGNMENT_STATUS.not_started!;
+                const StatusIcon = s.icon;
+                return (
+                  <div key={a.id} className="flex items-center gap-3 py-2 px-3 rounded-md border text-xs">
+                    <button
+                      onClick={() => updateStatus(a.id, a.status === 'completed' ? 'in_progress' : 'completed')}
+                      disabled={updating.has(a.id)}
+                      aria-label={a.status === 'completed' ? 'Mark as in progress' : 'Mark as completed'}
+                      className="shrink-0"
+                    >
+                      <StatusIcon className={`h-5 w-5 ${s.iconClass}`} />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium">{a.module_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px]">{a.risk_dimension}</Badge>
+                        <Badge variant="outline" className="text-[10px]">{a.amlr_article}</Badge>
+                        {a.due_date && <span className="text-muted-foreground">Due: {new Date(a.due_date).toLocaleDateString()}</span>}
+                      </div>
+                      {a.why_included && (
+                        <p className="flex items-start gap-1 mt-1 text-[11px] text-blue-600 dark:text-blue-400 leading-snug">
+                          <Info className="h-3 w-3 shrink-0 mt-0.5" />
+                          {a.why_included}
+                        </p>
+                      )}
                     </div>
-                    {a.why_included && (
-                      <p className="flex items-start gap-1 mt-1 text-[11px] text-blue-600 dark:text-blue-400 leading-snug">
-                        <Info className="h-3 w-3 shrink-0 mt-0.5" />
-                        {a.why_included}
-                      </p>
-                    )}
+                    <Badge className={`text-[10px] ${s.badgeClass}`}>{s.label}</Badge>
                   </div>
-                  <Badge variant="outline" className={STATUS_COLORS[a.status] ?? ''}>
-                    {a.status.replace('_', ' ')}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
         );

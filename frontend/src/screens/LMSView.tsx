@@ -1,19 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Users, AlertTriangle, CheckCircle2, Clock, Circle, Info, type LucideIcon } from 'lucide-react';
+import { Users, AlertTriangle, Info } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { StatCard } from '@/components/ui/stat-card';
 import { PipelineStepper, PIPELINE_STEPS } from '../components/PipelineStepper';
+import { ASSIGNMENT_STATUS } from '@/lib/statusStyles';
 import type { PipelinePlan } from '../types-v6';
-
-const STATUS_MAP: Record<string, { icon: LucideIcon; color: string; label: string }> = {
-  completed: { icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300', label: 'Completed' },
-  in_progress: { icon: Clock, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300', label: 'In Progress' },
-  not_started: { icon: Circle, color: 'bg-muted text-muted-foreground', label: 'Not Started' },
-};
 
 interface AssignmentRow { id: string; plan_id: string; user_id: string; module_index: number; quarter: string; due_date: string | null; status: string; completed_at: string | null; role_title: string; module_name: string; risk_dimension: string; amlr_article: string; why_included: string; }
 
@@ -60,9 +56,9 @@ export default function LMSView() {
 
       {assignments.length > 0 && (
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <Card className="shadow-sm"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{pct}%</p><p className="text-xs text-muted-foreground mt-1">Completion</p></CardContent></Card>
-          <Card className="shadow-sm"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{completed}</p><p className="text-xs text-muted-foreground mt-1">Completed</p></CardContent></Card>
-          <Card className="shadow-sm"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{assignments.length - completed}</p><p className="text-xs text-muted-foreground mt-1">Remaining</p></CardContent></Card>
+          <StatCard label="Completion" value={`${pct}%`} />
+          <StatCard label="Completed" value={completed} />
+          <StatCard label="Remaining" value={assignments.length - completed} />
         </div>
       )}
 
@@ -75,7 +71,7 @@ export default function LMSView() {
       {assignments.length > 0 && (
         <Card className="shadow-sm overflow-hidden">
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/50 text-left"><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Module &amp; Rationale</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground w-12">Q</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Risk Dim</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">AMLR</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Status</th><th className="py-3 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground w-28">Due</th></tr></thead><tbody>
-            {assignments.map(a => { const s = STATUS_MAP[a.status] ?? STATUS_MAP.not_started!; const Icon = s.icon; return (
+            {assignments.map(a => { const s = ASSIGNMENT_STATUS[a.status] ?? ASSIGNMENT_STATUS.not_started!; const Icon = s.icon; return (
               <tr key={a.id} className="border-b hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-4">
                   <p className="font-medium leading-tight">{a.module_name}</p>
@@ -89,7 +85,7 @@ export default function LMSView() {
                 <td className="py-3 px-4 text-muted-foreground">{a.quarter}</td>
                 <td className="py-3 px-4"><Badge variant="outline" className="text-[10px]">{a.risk_dimension}</Badge></td>
                 <td className="py-3 px-4"><Badge variant="outline" className="text-[10px]">{a.amlr_article}</Badge></td>
-                <td className="py-3 px-4"><Badge className={`text-[10px] ${s.color}`}><Icon className="h-3 w-3 mr-1" />{s.label}</Badge></td>
+                <td className="py-3 px-4"><Badge className={`text-[10px] ${s.badgeClass}`}><Icon className="h-3 w-3 mr-1" />{s.label}</Badge></td>
                 <td className="py-3 px-4 text-muted-foreground text-xs">{a.due_date ? new Date(a.due_date).toLocaleDateString() : '—'}</td>
               </tr>
             );})}

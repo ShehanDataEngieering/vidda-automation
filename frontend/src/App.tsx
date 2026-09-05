@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
 import { Shield } from 'lucide-react';
 import { ThemeProvider } from '@/components/theme-provider';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import NavBar from './components/NavBar';
 import UserManagement from './screens/UserManagement';
@@ -28,14 +30,18 @@ function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children
   return <RoleGate role={role} allowed="employee">{children}</RoleGate>;
 }
 
+// DEV-ONLY: set VITE_DISABLE_AUTH=true in frontend/.env to skip Clerk sign-in for local testing.
+// NEVER set this for a deployed build — it removes the login screen entirely.
+const AUTH_DISABLED = import.meta.env.VITE_DISABLE_AUTH === 'true';
+
 function AuthedApp() {
   const { user } = useUser();
-  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
+  const role = AUTH_DISABLED ? 'admin' : ((user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee');
 
   return (
     <div className="flex min-h-screen bg-background">
       <NavBar role={role} />
-      <main className="ml-56 flex-1 min-h-screen">
+      <main className="flex-1 min-h-screen pt-14 lg:pt-0 lg:ml-56">
         <Routes>
           {/* Home — redirect to pipeline for admin, training for employee */}
           <Route path="/" element={
@@ -93,13 +99,15 @@ function LoginPage() {
 
 function AppInner() {
   const { isSignedIn, isLoaded } = useUser();
-  if (!isLoaded) return (
-    <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
-      Loading…
-    </div>
-  );
+  if (!AUTH_DISABLED) {
+    if (!isLoaded) return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
 
-  if (!isSignedIn) return <LoginPage />;
+    if (!isSignedIn) return <LoginPage />;
+  }
 
   return (
     <ErrorBoundary>
@@ -111,11 +119,14 @@ function AppInner() {
 export default function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="vidda-theme">
-      <ClerkLoaded>
-        <BrowserRouter>
-          <AppInner />
-        </BrowserRouter>
-      </ClerkLoaded>
+      <TooltipProvider delayDuration={200}>
+        <ClerkLoaded>
+          <BrowserRouter>
+            <AppInner />
+          </BrowserRouter>
+        </ClerkLoaded>
+        <Toaster position="top-right" />
+      </TooltipProvider>
     </ThemeProvider>
   );
 }

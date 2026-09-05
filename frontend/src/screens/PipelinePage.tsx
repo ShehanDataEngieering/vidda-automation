@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/react';
+import { toast } from 'sonner';
 import {
   Target, Plus, Users, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, ArrowRight, Calendar, BarChart3, Loader2, ShieldAlert, Zap, Lock
+  ArrowRight, Calendar, BarChart3, Loader2, ShieldAlert, Zap, Lock
 } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { StatCard } from '@/components/ui/stat-card';
 import type { PipelinePlan, PlanAssignment } from '../types-v6';
 
 /* ==========================================================================
@@ -16,46 +18,15 @@ import type { PipelinePlan, PlanAssignment } from '../types-v6';
    Metrics, plans table, quick actions, activity feed
    ========================================================================== */
 
-function MetricCard({
-  label, value, sub, icon: Icon, trend
-}: {
-  label: string;
-  value: string;
-  sub?: string | undefined;
-  icon: React.ElementType;
-  trend?: string | undefined;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">{label}</p>
-            <p className="text-2xl font-semibold tracking-tight">{value}</p>
-            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-            {trend && (
-              <div className="flex items-center gap-1 mt-1.5 text-xs text-emerald-600">
-                <TrendingUp className="h-3 w-3" />
-                <span>{trend}</span>
-              </div>
-            )}
-          </div>
-          <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-            <Icon className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── */
-
 export default function PipelinePage() {
   const navigate = useNavigate();
   const api = useApi();
   const { user } = useUser();
-  const companyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
+  // DEV ONLY: VITE_DISABLE_AUTH bypass — companyId here only gates the UI, the
+  // backend derives the real companyId from its own auth bypass regardless.
+  const companyId = import.meta.env.VITE_DISABLE_AUTH === 'true'
+    ? 'dev-bypass'
+    : (user?.publicMetadata?.companyId as string | undefined) ?? '';
 
   const [plans, setPlans] = useState<PipelinePlan[]>([]);
   const [assignments, setAssignments] = useState<PlanAssignment[]>([]);
@@ -71,14 +42,14 @@ export default function PipelinePage() {
     try {
       // 1. All plans for this company
       const plansRes = await api('/api/pipeline');
-      if (plansRes.ok) {
-        setPlans(await plansRes.json());
-      }
+      if (plansRes.ok) setPlans(await plansRes.json());
+      else toast.error('Could not load training plans');
       // 2. All assignments across company plans
       const assignRes = await api('/api/pipeline/assignments/all');
-      if (assignRes.ok) {
-        setAssignments(await assignRes.json());
-      }
+      if (assignRes.ok) setAssignments(await assignRes.json());
+      else toast.error('Could not load assignments');
+    } catch {
+      toast.error('Connection error — dashboard may be out of date');
     } finally {
       setLoading(false);
     }
@@ -166,29 +137,29 @@ export default function PipelinePage() {
 
       {/* ── Metrics Row ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard
+        <StatCard
           label="Active Plans"
-          value={String(plans.length)}
+          value={plans.length}
           sub={`${approved.length} approved · ${inProgress.length} in progress`}
           icon={Target}
           trend={plans.length > 0 ? `+${plans.length} this month` : undefined}
         />
-        <MetricCard
+        <StatCard
           label="Training Modules"
-          value={String(assignments.length)}
+          value={assignments.length}
           sub={`Across ${plans.length} roles`}
           icon={Calendar}
         />
-        <MetricCard
+        <StatCard
           label="Completion Rate"
           value={`${completionRate}%`}
           sub={`${completedModules} of ${assignments.length} completed`}
           icon={BarChart3}
           trend={completionRate > 50 ? 'Above target' : undefined}
         />
-        <MetricCard
+        <StatCard
           label="Team Members"
-          value={String(new Set(assignments.map(a => a.user_id)).size)}
+          value={new Set(assignments.map(a => a.user_id)).size}
           sub="Assigned to training"
           icon={Users}
         />
@@ -327,7 +298,7 @@ export default function PipelinePage() {
                   <div key={article} className="flex items-center justify-between">
                     <span className="text-xs font-medium">{article}</span>
                     {covered ? (
-                      <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Covered</Badge>
+                      <Badge variant="success" className="text-[10px]">Covered</Badge>
                     ) : (
                       <Badge variant="secondary" className="text-[10px]">Not mapped</Badge>
                     )}

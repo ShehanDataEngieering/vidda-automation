@@ -5,6 +5,7 @@ import type { CompanyUser, PendingInvitation } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -156,39 +157,9 @@ export default function UserManagement() {
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <Card>
-          <CardContent className="pt-4 pb-4 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-              <Users className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{users.length}</p>
-              <p className="text-xs text-muted-foreground">Active users</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-              <Shield className="h-4 w-4 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{adminCount}</p>
-              <p className="text-xs text-muted-foreground">Admins</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-              <UserCheck className="h-4 w-4 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{employeeCount}</p>
-              <p className="text-xs text-muted-foreground">Employees</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard icon={Users} label="Active users" value={users.length} />
+        <StatCard icon={Shield} label="Admins" value={adminCount} />
+        <StatCard icon={UserCheck} label="Employees" value={employeeCount} />
       </div>
 
       {/* Invite form */}
@@ -323,6 +294,7 @@ export default function UserManagement() {
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
                       onClick={() => void removeUser(user.id)}
                       disabled={removing.has(user.id)}
+                      aria-label="Remove user"
                       title="Remove user"
                     >
                       {removing.has(user.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
