@@ -31,8 +31,9 @@ export async function searchChunks(
   regulation: string,
   role: string,
   topK = 5,
+  queryText?: string,
 ): Promise<SearchResult[]> {
-  const searchTerm = `${regulation} compliance ${role}`;
+  const searchTerm = queryText ?? `${regulation} compliance ${role}`;
 
   // ── BM25 path ──────────────────────────────────────────────────────────────
   const bm25Res = await db.query<DbChunkRow>(

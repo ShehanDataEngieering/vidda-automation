@@ -34,6 +34,13 @@ export interface EvalSummary {
 }
 
 const EVAL_QUERIES: EvalQuery[] = [
+  // NOTE: the 'AML' regulation tag in this corpus holds Directive (EU) 2018/1673 —
+  // the criminal-law directive on money laundering *offences* (definitions, jurisdiction,
+  // corporate liability). It contains nothing on customer due diligence, suspicious-transaction
+  // reporting, or the MLRO role. That content exists in the DB but is tagged 'KYC' instead
+  // (see kyc-1 below), and searchChunks filters strictly by regulation, so these three
+  // queries have no correct chunk to retrieve under 'AML' as currently tagged. Left empty
+  // deliberately — this is real ground truth (a corpus/tagging gap), not an oversight.
   {
     id: 'aml-1',
     query: 'What are the customer due diligence requirements under AML?',
@@ -63,7 +70,7 @@ const EVAL_QUERIES: EvalQuery[] = [
     query: 'Data subject access rights under GDPR',
     regulation: 'GDPR',
     role: 'Compliance Officer',
-    relevantArticleNumbers: [],
+    relevantArticleNumbers: ['15'],
     expectedAnswerContains: ['data subject', 'access', 'right'],
   },
   {
@@ -71,7 +78,7 @@ const EVAL_QUERIES: EvalQuery[] = [
     query: 'What are the GDPR requirements for data breach notification?',
     regulation: 'GDPR',
     role: 'IT Security Manager',
-    relevantArticleNumbers: [],
+    relevantArticleNumbers: ['33', '34'],
     expectedAnswerContains: ['breach', 'notification', 'supervisory'],
   },
   {
@@ -83,11 +90,14 @@ const EVAL_QUERIES: EvalQuery[] = [
     expectedAnswerContains: ['lawfulness', 'fairness', 'transparency', 'purpose'],
   },
   {
+    // The corpus has no dedicated client-categorisation article (that's normally MiFID II
+    // Annex II, not present here) — Article 24's general conduct-of-business obligations
+    // is the closest available match, so precision/recall here are a lower bar than gdpr-3.
     id: 'mifid2-1',
     query: 'MiFID II client categorisation requirements',
     regulation: 'MIFID2',
     role: 'Investment Advisor',
-    relevantArticleNumbers: [],
+    relevantArticleNumbers: ['24'],
     expectedAnswerContains: ['client', 'categorisation', 'retail', 'professional'],
   },
   {
@@ -95,7 +105,7 @@ const EVAL_QUERIES: EvalQuery[] = [
     query: 'Best execution obligations under MiFID II',
     regulation: 'MIFID2',
     role: 'Trader',
-    relevantArticleNumbers: [],
+    relevantArticleNumbers: ['27'],
     expectedAnswerContains: ['best execution', 'order', 'client'],
   },
   {
@@ -103,18 +113,56 @@ const EVAL_QUERIES: EvalQuery[] = [
     query: 'DORA ICT risk management requirements for financial entities',
     regulation: 'DORA',
     role: 'IT Security Manager',
-    relevantArticleNumbers: [],
+    relevantArticleNumbers: ['5', '6'],
     expectedAnswerContains: ['ICT', 'risk', 'management', 'digital operational'],
   },
   {
+    // Only 1 chunk exists under 'KYC' in this corpus (general CDD/beneficial-owner
+    // identification, not corporate-specific) — it's the best available match, not a
+    // precise one, so a perfect retriever still won't clear a high bar here.
     id: 'kyc-1',
     query: 'What KYC documents are required for corporate clients?',
     regulation: 'KYC',
     role: 'KYC Analyst EDD',
-    relevantArticleNumbers: [],
+    relevantArticleNumbers: ['13'],
     expectedAnswerContains: ['corporate', 'document', 'identification', 'beneficial'],
   },
+  // AMLR queries — this is the regulation the live pipeline actually queries
+  // (backend/src/routes/pipeline.ts calls searchChunks('AMLR', ...)); the queries above
+  // exercise the general RAG corpus but never touch the code path the app depends on.
+  {
+    id: 'amlr-1',
+    query: 'What customer due diligence measures must obliged entities apply under AMLR?',
+    regulation: 'AMLR',
+    role: 'Compliance Officer',
+    relevantArticleNumbers: ['10a', '10b'],
+    expectedAnswerContains: ['due diligence', 'customer', 'identify'],
+  },
+  {
+    id: 'amlr-2',
+    query: 'What training must obliged entities provide employees on money laundering prevention under AMLR?',
+    regulation: 'AMLR',
+    role: 'Training Manager',
+    relevantArticleNumbers: ['12a', '12b', '12c'],
+    expectedAnswerContains: ['training', 'employee', 'money laundering'],
+  },
+  {
+    id: 'amlr-3',
+    query: 'How long must obliged entities retain records under AMLR?',
+    regulation: 'AMLR',
+    role: 'Compliance Officer',
+    relevantArticleNumbers: ['14'],
+    expectedAnswerContains: ['record', 'retain'],
+  },
 ];
+
+// Treats "5.1"/"5.2" as belonging to article "5", but rejects unrelated numbers that
+// merely contain the same digits as a substring (e.g. "15.1", "50", "25.1" vs relevant "5").
+function articleMatches(articleNumber: string, relevantNumber: string): boolean {
+  const a = articleNumber.trim().toLowerCase();
+  const r = relevantNumber.trim().toLowerCase();
+  return a === r || a.startsWith(`${r}.`);
+}
 
 function computePrecisionAtK(
   retrieved: Array<{ article_number: string }>,
@@ -124,9 +172,7 @@ function computePrecisionAtK(
   if (retrieved.length === 0 || relevantArticleNumbers.length === 0) return 0;
   const topK = retrieved.slice(0, k);
   const relevant = topK.filter(r =>
-    relevantArticleNumbers.some(an =>
-      r.article_number.toLowerCase().includes(an.toLowerCase()),
-    ),
+    relevantArticleNumbers.some(an => articleMatches(r.article_number, an)),
   );
   return relevant.length / Math.min(k, topK.length);
 }
@@ -140,9 +186,7 @@ function computeRecallAtK(
   const topK = retrieved.slice(0, k);
   const found = new Set(
     topK
-      .map(r => relevantArticleNumbers.find(an =>
-        r.article_number.toLowerCase().includes(an.toLowerCase()),
-      ))
+      .map(r => relevantArticleNumbers.find(an => articleMatches(r.article_number, an)))
       .filter(Boolean),
   );
   return found.size / relevantArticleNumbers.length;
@@ -154,9 +198,7 @@ function computeReciprocalRank(
 ): number {
   if (retrieved.length === 0 || relevantArticleNumbers.length === 0) return 0;
   for (let i = 0; i < retrieved.length; i++) {
-    const match = relevantArticleNumbers.some(an =>
-      retrieved[i]!.article_number.toLowerCase().includes(an.toLowerCase()),
-    );
+    const match = relevantArticleNumbers.some(an => articleMatches(retrieved[i]!.article_number, an));
     if (match) return 1 / (i + 1);
   }
   return 0;
@@ -171,7 +213,7 @@ export async function evaluateRetrieval(
   let vecCount = 0;
 
   try {
-    results = await searchChunks(query.regulation, query.role, 5);
+    results = await searchChunks(query.regulation, query.role, 5, query.query);
   } catch (err) {
     logger.warn('Eval query failed', { queryId: query.id, error: String(err) });
   }
