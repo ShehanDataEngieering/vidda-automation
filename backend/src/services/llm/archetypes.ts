@@ -6,7 +6,7 @@ import type { TrainingPlan, RiskDimensionScore } from '../../types';
 // These 5 plans represent ~40+ hours of consultant manual work, encoded into
 // regulation-validated JSON. They are the "hard to copy" IP of the product.
 //
-// Usage: When classification confidence >= 85%, merge LLM output with archetype
+// Usage: When classification confidence >= 70%, merge LLM output with archetype
 // to ensure coverage, depth, and audit defensibility even if the LLM fails.
 // ===========================================================================
 

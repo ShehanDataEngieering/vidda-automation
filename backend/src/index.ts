@@ -1,9 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { clerkMiddleware, resolveAuthUser } from './middleware/auth';
-import { companyRouter } from './routes/company';
 import { authRouter } from './routes/auth';
 import { documentsRouter } from './routes/documents';
 import { trainingRouter } from './routes/training';
@@ -11,13 +12,9 @@ import { usersRouter } from './routes/users';
 import { pipelineRouter } from './routes/pipeline';
 import { logger } from './utils/logger';
 
-// Some environments embed the frontend in an iframe.
-// Allow same-origin framing to avoid Chrome "Unsafe attempt to load URL" errors.
-// If you deploy behind a stricter security policy, adjust accordingly.
-
 dotenv.config();
 
-const REQUIRED_ENV = ['DATABASE_URL', 'OPENROUTER_API_KEY', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 'VOYAGE_API_KEY'] as const;
+const REQUIRED_ENV = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 'VOYAGE_API_KEY'] as const;
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(`Missing required environment variable: ${key}`);
@@ -27,12 +24,17 @@ for (const key of REQUIRED_ENV) {
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
-app.use(cors());
-// Allow same-origin framing to avoid Chrome "Unsafe attempt to load URL" errors.
-app.use((_req, res, next) => {
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  next();
-});
+// Comma-separated list of allowed frontend origins, e.g. "https://vidda.app,http://localhost:5173"
+const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(',').map((o) => o.trim());
+
+app.use(helmet({
+  // Some environments embed the frontend in an iframe on the same origin.
+  crossOriginResourcePolicy: { policy: 'same-site' },
+}));
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(express.json());
 
 // HTTP request logging
@@ -44,6 +46,15 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+// Rate-limit the AI-calling pipeline routes specifically — cheap to hit, expensive to serve
+const pipelineLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/pipeline', pipelineLimiter);
+
 // Clerk session parsing
 app.use(clerkMiddleware());
 
@@ -51,12 +62,16 @@ app.use(clerkMiddleware());
 app.use(resolveAuthUser);
 
 // Routes
-app.use('/api/company', companyRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/training', trainingRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/pipeline', pipelineRouter);
+
+// 404 — no route matched
+app.use((req, res) => {
+  res.status(404).json({ error: `Not found: ${req.method} ${req.originalUrl}` });
+});
 
 // Global error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -67,6 +82,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(PORT, () => {
   logger.info(`Vidda backend started`, { port: PORT, env: process.env.NODE_ENV ?? 'development' });
   logger.info('Routes mounted', {
-    routes: ['/health', '/api/company', '/api/auth', '/api/documents', '/api/training', '/api/users', '/api/pipeline'],
+    routes: ['/health', '/api/auth', '/api/documents', '/api/training', '/api/users', '/api/pipeline'],
   });
 });

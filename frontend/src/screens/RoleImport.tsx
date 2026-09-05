@@ -365,9 +365,11 @@ export default function RoleImport() {
                     {analysing ? <><Loader2 className="h-4 w-4 animate-spin" /> Analysing…</>
                       : <><Sparkles className="h-4 w-4" /> Analyse Role</>}
                   </Button>
-                  <Button variant="outline" onClick={() => setRoleDescription(DEMO_ROLE_DESCRIPTION)}>
-                    Load Example
-                  </Button>
+                  {process.env.NODE_ENV !== 'production' && (
+                    <Button variant="outline" onClick={() => setRoleDescription(DEMO_ROLE_DESCRIPTION)}>
+                      Load Example
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => { setRoleDescription(''); setRoleTitle(''); }} className="text-muted-foreground">
                     <X className="h-3.5 w-3.5 mr-1" /> Clear
                   </Button>

@@ -9,14 +9,6 @@ CREATE TABLE IF NOT EXISTS companies (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS risk_profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
-  regulation VARCHAR(50) NOT NULL,
-  score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
-  UNIQUE(company_id, regulation)
-);
-
 -- Article-boundary chunks with structured metadata
 CREATE TABLE IF NOT EXISTS regulatory_chunks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,35 +20,6 @@ CREATE TABLE IF NOT EXISTS regulatory_chunks (
   embedding vector(1024),
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE (regulation, article_number)
-);
-
-CREATE TABLE IF NOT EXISTS training_modules (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
-  regulation VARCHAR(50) NOT NULL,
-  role VARCHAR(100) NOT NULL,
-  content TEXT,
-  status VARCHAR(20) DEFAULT 'pending'
-    CHECK (status IN ('pending', 'approved', 'rejected')),
-  quality_score INTEGER DEFAULT 0,
-  quality_breakdown JSONB,
-  citation_grounded BOOLEAN DEFAULT false,
-  version INTEGER DEFAULT 1,
-  rationale TEXT,
-  risk_dimensions JSONB,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS reviews (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  module_id UUID REFERENCES training_modules(id) ON DELETE CASCADE,
-  action VARCHAR(20) NOT NULL
-    CHECK (action IN ('approved', 'rejected', 'edited', 'regenerated')),
-  reviewer VARCHAR(100) DEFAULT 'Compliance Officer',
-  comment TEXT,
-  previous_content TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- GIN index for FTS on content (entities searched at query time — 15 rows, no perf issue)
@@ -142,36 +105,62 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
 
 -- =============================================================================
--- V3: Employee Training Dashboard
+-- V6: AMLR Pipeline — training plans + audit events + assignments
+-- (previously only in migrate-v6.sql; folded in here so a fresh database
+--  actually gets the tables the current pipeline depends on)
 -- =============================================================================
 
-CREATE TABLE IF NOT EXISTS module_completions (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      VARCHAR(255) NOT NULL,
-  module_id    UUID REFERENCES training_modules(id) ON DELETE CASCADE,
-  completed_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE (user_id, module_id)
-);
-CREATE INDEX IF NOT EXISTS idx_completions_user ON module_completions(user_id);
-
--- =============================================================================
--- V5: Interactive Course Player
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS module_quizzes (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  module_id  UUID REFERENCES training_modules(id) ON DELETE CASCADE,
-  questions  JSONB NOT NULL,
+CREATE TABLE IF NOT EXISTS training_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  created_by VARCHAR(255) NOT NULL,
+  role_title VARCHAR(200),
+  role_description TEXT,
+  line_of_defence VARCHAR(10),
+  role_profile JSONB,
+  risk_matrix JSONB,
+  amlr_mappings JSONB,
+  training_plan JSONB,
+  quality_score INTEGER,
+  quality_breakdown JSONB,
+  current_step VARCHAR(20) DEFAULT 'role',
+  version INTEGER DEFAULT 1,
+  status VARCHAR(20) DEFAULT 'draft'
+    CHECK (status IN ('draft', 'approved')),
+  reviewer VARCHAR(255),
   created_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE (module_id)
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS quiz_attempts (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  module_id  UUID REFERENCES training_modules(id) ON DELETE CASCADE,
-  user_id    VARCHAR(255) NOT NULL,
-  answers    JSONB NOT NULL,
-  score      INTEGER NOT NULL,
-  passed     BOOLEAN NOT NULL,
+CREATE INDEX IF NOT EXISTS idx_training_plans_company ON training_plans(company_id, status);
+
+CREATE TABLE IF NOT EXISTS plan_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES training_plans(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  step VARCHAR(20) NOT NULL,
+  action VARCHAR(30) NOT NULL
+    CHECK (action IN ('ai_generated', 'human_override', 'approved', 'regenerated')),
+  reviewer VARCHAR(255),
+  before_state JSONB,
+  after_state JSONB,
+  note TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_plan_events_plan ON plan_events(plan_id, version);
+
+CREATE TABLE IF NOT EXISTS plan_assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES training_plans(id) ON DELETE CASCADE,
+  user_id VARCHAR(255) NOT NULL,
+  module_index INTEGER NOT NULL,
+  quarter VARCHAR(4) NOT NULL,
+  due_date TIMESTAMP,
+  status VARCHAR(20) DEFAULT 'not_started'
+    CHECK (status IN ('not_started', 'in_progress', 'completed')),
+  completed_at TIMESTAMP,
+  UNIQUE (plan_id, user_id, module_index, quarter)
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_assignments_user ON plan_assignments(user_id, status);

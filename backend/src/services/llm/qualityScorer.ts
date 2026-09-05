@@ -1,5 +1,5 @@
 import type { TrainingPlan, RiskDimensionScore } from '../../types';
-import { openrouter, FALLBACK_MODEL } from './openrouter';
+import { createCompletion } from './anthropic';
 import { logger } from '../../utils/logger';
 
 // ===========================================================================
@@ -153,25 +153,21 @@ async function scoreCoherence(plan: TrainingPlan, roleTitle: string): Promise<{ 
   try {
     const prompt = `${COHERENCE_PROMPT}\n\nROLE: ${roleTitle}\n\nTRAINING PLAN:\n${JSON.stringify(plan, null, 2)}`;
 
-    const llmCall = openrouter.chat.completions.create({
-      model: FALLBACK_MODEL,
-      max_tokens: 600,
+    const llmCall = createCompletion({
+      system: COHERENCE_PROMPT,
+      prompt,
+      maxTokens: 600,
       temperature: 0.1,
-      messages: [
-        { role: 'system', content: COHERENCE_PROMPT },
-        { role: 'user', content: prompt },
-      ],
     });
 
     // Timeout after 8s — coherence is supplementary, don't block the pipeline
-    const response = await Promise.race([
+    const content = await Promise.race([
       llmCall,
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Timeout')), 8000)
       ),
     ]);
 
-    const content = response.choices[0]?.message?.content ?? '';
     const cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
 
     let parsed: Record<string, unknown>;

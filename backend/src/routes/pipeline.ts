@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/client';
 import { clerkClient } from '@clerk/express';
-import { openrouter, DEFAULT_MODEL, FALLBACK_MODEL } from '../services/llm/openrouter';
+import { createCompletion, streamCompletion } from '../services/llm/anthropic';
 import { PIPELINE_SYSTEM_PROMPT, ROLE_ANALYSIS_USER, RISK_ASSESSMENT_USER, AMLR_MAPPING_USER, TRAINING_PLAN_USER } from '../services/llm/pipelinePrompt';
 import { validateRoleProfile, validateRiskMatrix, validateAMLRMappings, validateTrainingPlan } from '../services/llm/pipelineValidator';
 import { searchChunks } from '../services/rag/vectorSearch';
@@ -185,39 +185,18 @@ pipelineRouter.post('/:id/analyze-role', async (req: Request, res: Response) => 
   const userPrompt = `${ROLE_ANALYSIS_USER}\n\nROLE DESCRIPTION:\n${roleDescription}`;
 
   try {
-    let rawOutput: string;
-    try {
-      const message = await openrouter.chat.completions.create({
-        model: DEFAULT_MODEL, max_tokens: 600, temperature: 0.1,
-        messages: [
-          { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-      });
-      rawOutput = message.choices[0]?.message?.content ?? '{}';
-    } catch (err) {
-      logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`, { error: String(err) });
-      const message = await openrouter.chat.completions.create({
-        model: FALLBACK_MODEL, max_tokens: 600, temperature: 0.1,
-        messages: [
-          { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-      });
-      rawOutput = message.choices[0]?.message?.content ?? '{}';
-    }
+    const rawOutput = await createCompletion({
+      system: PIPELINE_SYSTEM_PROMPT, prompt: userPrompt, maxTokens: 600, temperature: 0.1,
+    });
 
     let validation = validateRoleProfile(rawOutput);
     if (!validation.valid) {
       logger.warn('Role analysis first attempt invalid, retrying');
-      const retryMessage = await openrouter.chat.completions.create({
-        model: DEFAULT_MODEL, max_tokens: 600, temperature: 0.0,
-        messages: [
-          { role: 'system', content: PIPELINE_SYSTEM_PROMPT + '\n\nCRITICAL: Output ONLY the JSON object. No markdown.' },
-          { role: 'user', content: userPrompt },
-        ],
+      const retryOutput = await createCompletion({
+        system: PIPELINE_SYSTEM_PROMPT + '\n\nCRITICAL: Output ONLY the JSON object. No markdown.',
+        prompt: userPrompt, maxTokens: 600, temperature: 0.0,
       });
-      validation = validateRoleProfile(retryMessage.choices[0]?.message?.content ?? '{}');
+      validation = validateRoleProfile(retryOutput);
     }
 
     if (!validation.valid || !validation.data) {
@@ -252,26 +231,7 @@ pipelineRouter.post('/:id/analyze-role', async (req: Request, res: Response) => 
 // ===========================================================================
 
 async function callAIWithRetry(systemPrompt: string, userPrompt: string, maxTokens = 600, temperature = 0.1): Promise<string> {
-  try {
-    const message = await openrouter.chat.completions.create({
-      model: DEFAULT_MODEL, max_tokens: maxTokens, temperature,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    });
-    return message.choices[0]?.message?.content ?? '{}';
-  } catch (err) {
-    logger.warn(`Primary model failed, falling back to ${FALLBACK_MODEL}`, { error: String(err) });
-    const message = await openrouter.chat.completions.create({
-      model: FALLBACK_MODEL, max_tokens: maxTokens, temperature,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    });
-    return message.choices[0]?.message?.content ?? '{}';
-  }
+  return createCompletion({ system: systemPrompt, prompt: userPrompt, maxTokens, temperature });
 }
 
 // ===========================================================================
@@ -509,33 +469,11 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
 
   const send = (event: Record<string, unknown>) => res.write(`data: ${JSON.stringify(event)}\n\n`);
   let fullText = '';
-  let modelUsed = DEFAULT_MODEL;
 
   try {
-    let stream: AsyncIterable<unknown>;
-    try {
-      stream = await openrouter.chat.completions.create({
-        model: DEFAULT_MODEL, max_tokens: 5000, temperature: 0.3, stream: true,
-        messages: [
-          { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-      });
-    } catch (err) {
-      logger.warn(`Primary failed, fallback to ${FALLBACK_MODEL}`);
-      modelUsed = FALLBACK_MODEL;
-      stream = await openrouter.chat.completions.create({
-        model: FALLBACK_MODEL, max_tokens: 5000, temperature: 0.3, stream: true,
-        messages: [
-          { role: 'system', content: PIPELINE_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-      });
-    }
-
-    for await (const chunk of stream as AsyncIterable<{ choices?: Array<{ delta?: { content?: string } }> }>) {
-      const text = chunk.choices?.[0]?.delta?.content;
-      if (text) { fullText += text; send({ type: 'token', token: text }); }
+    for await (const text of streamCompletion({ system: PIPELINE_SYSTEM_PROMPT, prompt: userPrompt, maxTokens: 5000, temperature: 0.3 })) {
+      fullText += text;
+      send({ type: 'token', token: text });
     }
 
     const validation = validateTrainingPlan(fullText);
@@ -576,7 +514,7 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
       [planId, planRow.version, JSON.stringify({ plan: finalPlan, quality: qualityScore })],
     );
 
-    logger.info('Training plan generated', { planId, model: modelUsed, archetypeMerged: !!archetype });
+    logger.info('Training plan generated', { planId, archetypeMerged: !!archetype });
     send({ type: 'done', plan: finalPlan, quality: qualityScore, warnings: validation.warnings });
   } catch (err) {
     logger.error('Plan generation failed', { error: String(err) });
