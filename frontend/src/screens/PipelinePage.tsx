@@ -4,16 +4,13 @@ import { useUser } from '@clerk/react';
 import { toast } from 'sonner';
 import {
   Target, Plus, Users, CheckCircle2, Clock, AlertTriangle,
-  ArrowRight, Calendar, BarChart3, Loader2, ShieldAlert, Zap, Lock
+  ArrowRight, Calendar, BarChart3, Loader2, Zap
 } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/stat-card';
-import { GradientPanel } from '@/components/ui/gradient-panel';
-import { IconChip } from '@/components/ui/icon-chip';
-import { brand } from '@/lib/brand';
 import type { PipelinePlan, PlanAssignment } from '../types-v6';
 
 /* ==========================================================================
@@ -101,29 +98,6 @@ export default function PipelinePage() {
           </p>
         </div>
       )}
-
-      {/* ── AMLR 2027 Compliance Pitch Banner ── */}
-      <GradientPanel variant="dark" className="mb-8">
-        <div className="relative flex items-start gap-4 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg" style={{ background: brand.amber }}>
-            <ShieldAlert className="h-5 w-5" style={{ color: brand.espresso }} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-sm font-semibold" style={{ color: brand.creamTextBright }}>AMLR 2024/1624 — Compliance Deadline: 2027</h2>
-              <Badge className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 text-[10px]">Mandatory</Badge>
-            </div>
-            <p className="text-xs leading-relaxed mb-4" style={{ color: brand.creamText, opacity: 0.85 }}>
-              EU Regulation 2024/1624 Article 12 requires training to be <strong>role-specific</strong>, <strong>risk-appropriate</strong>, and <strong>documented</strong>. Generic AML e-learning given to all staff is no longer compliant. Vidda automates the mapping from job role → risk exposure → regulatory obligation → training plan — with a full audit trail for regulators.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <IconChip icon={Zap} label="Under 5 minutes" sub="Role import → approved plan" />
-              <IconChip icon={Lock} label="Article-cited" sub="Every module mandated by AMLR" />
-              <IconChip icon={CheckCircle2} label="Human-approved" sub="Gate before any training is assigned" />
-            </div>
-          </div>
-        </div>
-      </GradientPanel>
 
       {/* ── Metrics Row ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
