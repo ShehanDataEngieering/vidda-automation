@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { UserButton } from '@clerk/react';
 import {
-  Shield, Target, BookOpen, ChevronRight, Users, Menu, X, type LucideIcon
+  Target, BookOpen, ChevronRight, Users, Menu, X, type LucideIcon
 } from 'lucide-react';
+import { LogoTile } from '@/components/Logo';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Separator } from '@/components/ui/separator';
@@ -48,9 +49,7 @@ export default function NavBar({ role }: { role: 'admin' | 'employee' }) {
           <Menu className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
-            <Shield className="h-3.5 w-3.5 text-primary-foreground" />
-          </div>
+          <LogoTile size={24} />
           <p className="text-sm font-semibold text-sidebar-foreground">Vidda</p>
         </div>
       </div>
@@ -73,9 +72,7 @@ export default function NavBar({ role }: { role: 'admin' | 'employee' }) {
         {/* Logo */}
         <div className="flex items-center justify-between gap-2 px-4 py-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-              <Shield className="h-4 w-4 text-primary-foreground" />
-            </div>
+            <LogoTile size={28} />
             <div>
               <p className="text-sm font-semibold text-sidebar-foreground">Vidda</p>
               <p className="text-[10px] text-sidebar-foreground/50 capitalize">{role} portal</p>

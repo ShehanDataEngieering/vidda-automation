@@ -1,12 +1,14 @@
 import { type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { SignIn, useUser, ClerkLoaded } from '@clerk/react';
-import { Shield } from 'lucide-react';
+import { SignIn, SignUp, useUser, ClerkLoaded } from '@clerk/react';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { LogoTile } from '@/components/Logo';
 import NavBar from './components/NavBar';
+import Home from './screens/Home';
+import CompanyOnboarding from './screens/CompanyOnboarding';
 import UserManagement from './screens/UserManagement';
 import PipelinePage from './screens/PipelinePage';
 import RoleImport from './screens/RoleImport';
@@ -30,13 +32,9 @@ function EmployeeGate({ role, children }: { role: 'admin' | 'employee'; children
   return <RoleGate role={role} allowed="employee">{children}</RoleGate>;
 }
 
-// DEV-ONLY: set VITE_DISABLE_AUTH=true in frontend/.env to skip Clerk sign-in for local testing.
-// NEVER set this for a deployed build — it removes the login screen entirely.
-const AUTH_DISABLED = import.meta.env.VITE_DISABLE_AUTH === 'true';
-
 function AuthedApp() {
   const { user } = useUser();
-  const role = AUTH_DISABLED ? 'admin' : ((user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee');
+  const role = (user?.publicMetadata?.role as 'admin' | 'employee' | undefined) ?? 'employee';
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -73,41 +71,63 @@ function AuthedApp() {
   );
 }
 
-function LoginPage() {
+function SignInPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-            <Shield className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <LogoTile size={40} />
           <h1 className="text-xl font-semibold">Vidda Compliance</h1>
           <p className="text-sm text-muted-foreground">Sign in to your account</p>
         </div>
-        <SignIn
-          appearance={{
-            elements: {
-              footerAction: { display: 'none' },
-              footer: { display: 'none' },
-            },
-          }}
-        />
+        <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" />
       </div>
     </div>
   );
 }
 
-function AppInner() {
-  const { isSignedIn, isLoaded } = useUser();
-  if (!AUTH_DISABLED) {
-    if (!isLoaded) return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
-        Loading…
+function SignUpPage() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex flex-col items-center gap-2">
+          <LogoTile size={40} />
+          <h1 className="text-xl font-semibold">Create your account</h1>
+          <p className="text-sm text-muted-foreground">Set up Vidda for your organization</p>
+        </div>
+        <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" />
       </div>
-    );
+    </div>
+  );
+}
 
-    if (!isSignedIn) return <LoginPage />;
-  }
+// Unauthenticated visitors: marketing page + Clerk auth screens.
+function PublicRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/sign-in/*" element={<SignInPage />} />
+      <Route path="/sign-up/*" element={<SignUpPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function AppInner() {
+  const { isSignedIn, isLoaded, user } = useUser();
+
+  if (!isLoaded) return (
+    <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
+      Loading…
+    </div>
+  );
+
+  if (!isSignedIn) return <PublicRoutes />;
+
+  // Signed in but no company yet (fresh self-serve signup) — onboarding gate
+  // takes over every route until they've created a company profile.
+  const companyId = user?.publicMetadata?.['companyId'] as string | undefined;
+  if (!companyId) return <CompanyOnboarding />;
 
   return (
     <ErrorBoundary>

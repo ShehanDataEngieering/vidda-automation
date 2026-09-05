@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/stat-card';
+import { GradientPanel } from '@/components/ui/gradient-panel';
+import { IconChip } from '@/components/ui/icon-chip';
+import { brand } from '@/lib/brand';
 import type { PipelinePlan, PlanAssignment } from '../types-v6';
 
 /* ==========================================================================
@@ -22,11 +25,7 @@ export default function PipelinePage() {
   const navigate = useNavigate();
   const api = useApi();
   const { user } = useUser();
-  // DEV ONLY: VITE_DISABLE_AUTH bypass — companyId here only gates the UI, the
-  // backend derives the real companyId from its own auth bypass regardless.
-  const companyId = import.meta.env.VITE_DISABLE_AUTH === 'true'
-    ? 'dev-bypass'
-    : (user?.publicMetadata?.companyId as string | undefined) ?? '';
+  const companyId = (user?.publicMetadata?.companyId as string | undefined) ?? '';
 
   const [plans, setPlans] = useState<PipelinePlan[]>([]);
   const [assignments, setAssignments] = useState<PlanAssignment[]>([]);
@@ -104,36 +103,27 @@ export default function PipelinePage() {
       )}
 
       {/* ── AMLR 2027 Compliance Pitch Banner ── */}
-      <div className="mb-8 rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-slate-50 dark:from-blue-950/30 dark:to-slate-900/30 p-5">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <ShieldAlert className="h-5 w-5" />
+      <GradientPanel variant="dark" className="mb-8">
+        <div className="relative flex items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg" style={{ background: brand.amber }}>
+            <ShieldAlert className="h-5 w-5" style={{ color: brand.espresso }} />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-200">AMLR 2024/1624 — Compliance Deadline: 2027</h2>
+              <h2 className="text-sm font-semibold" style={{ color: brand.creamTextBright }}>AMLR 2024/1624 — Compliance Deadline: 2027</h2>
               <Badge className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 text-[10px]">Mandatory</Badge>
             </div>
-            <p className="text-xs text-blue-800/80 dark:text-blue-300/80 leading-relaxed mb-3">
+            <p className="text-xs leading-relaxed mb-4" style={{ color: brand.creamText, opacity: 0.85 }}>
               EU Regulation 2024/1624 Article 12 requires training to be <strong>role-specific</strong>, <strong>risk-appropriate</strong>, and <strong>documented</strong>. Generic AML e-learning given to all staff is no longer compliant. Vidda automates the mapping from job role → risk exposure → regulatory obligation → training plan — with a full audit trail for regulators.
             </p>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-400">
-                <Zap className="h-3.5 w-3.5" />
-                <span>Role import → approved plan in under 5 minutes</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-400">
-                <Lock className="h-3.5 w-3.5" />
-                <span>Every module cites the exact AMLR article that mandates it</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-400">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Human approval gate before any training is assigned</span>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <IconChip icon={Zap} label="Under 5 minutes" sub="Role import → approved plan" />
+              <IconChip icon={Lock} label="Article-cited" sub="Every module mandated by AMLR" />
+              <IconChip icon={CheckCircle2} label="Human-approved" sub="Gate before any training is assigned" />
             </div>
           </div>
         </div>
-      </div>
+      </GradientPanel>
 
       {/* ── Metrics Row ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
