@@ -9,6 +9,24 @@ import { logger } from '../utils/logger';
 
 export const documentsRouter = Router();
 
+/**
+ * Documents left in 'processing' only get there via the setImmediate chunking
+ * job below — if the process restarts mid-job, they're stuck there forever
+ * with no retry path. Call once at server startup to flag them as errored so
+ * an admin can see the failure and re-upload.
+ */
+export async function reconcileStaleDocuments(): Promise<void> {
+  const { rows } = await pool.query<{ id: string; display_name: string }>(
+    `UPDATE documents
+     SET status = 'error', error_message = 'Processing was interrupted by a server restart. Please re-upload.'
+     WHERE status = 'processing'
+     RETURNING id, display_name`,
+  );
+  if (rows.length > 0) {
+    logger.warn('Reconciled stale processing documents on startup', { count: rows.length, documentIds: rows.map(r => r.id) });
+  }
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB

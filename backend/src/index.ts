@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import { clerkMiddleware, resolveAuthUser } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import { companiesRouter } from './routes/companies';
-import { documentsRouter } from './routes/documents';
+import { documentsRouter, reconcileStaleDocuments } from './routes/documents';
 import { trainingRouter } from './routes/training';
 import { usersRouter } from './routes/users';
 import { pipelineRouter } from './routes/pipeline';
@@ -86,4 +86,5 @@ app.listen(PORT, () => {
   logger.info('Routes mounted', {
     routes: ['/health', '/api/auth', '/api/companies', '/api/documents', '/api/training', '/api/users', '/api/pipeline'],
   });
+  reconcileStaleDocuments().catch((err) => logger.error('Failed to reconcile stale documents', { error: String(err) }));
 });

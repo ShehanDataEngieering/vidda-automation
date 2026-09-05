@@ -65,7 +65,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     for (let j = 0; j < vecs.length; j++) {
       const origIdx = uncachedIndices[i + j]!;
       results[origIdx] = vecs[j]!;
-      embedCache.setCachedEmbedding(uncachedTexts[j]!, vecs[j]!);
+      embedCache.setCachedEmbedding(uncachedTexts[i + j]!, vecs[j]!);
     }
     if (i + BATCH_SIZE < uncachedTexts.length) await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
   }

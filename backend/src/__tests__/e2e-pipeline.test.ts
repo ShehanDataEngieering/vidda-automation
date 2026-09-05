@@ -26,13 +26,6 @@ authModule.resolveAuthUser = (req: any, _res: any, next: any) => {
   };
   next();
 };
-authModule.resolveAuthUser = (req: any, _res: any, next: any) => {
-  req.resolvedUser = {
-    userId: TEST_USER_ID,
-    publicMetadata: { role: 'admin', companyId: TEST_COMPANY_ID, employeeRole: null },
-  };
-  next();
-};
 
 // ── Phase 2: Load pipeline router (uses patched middleware) ──
 import express from 'express';

@@ -207,8 +207,7 @@ usersRouter.delete('/:userId', async (req: Request, res: Response) => {
   const { userId } = req.params;
 
   // Prevent self-removal
-  const { userId: adminId } = (req as unknown as { auth: { userId: string } }).auth ?? {};
-  if (userId === adminId || userId === ctx.userId) {
+  if (userId === ctx.userId) {
     res.status(400).json({ error: 'You cannot remove yourself from the company.' });
     return;
   }

@@ -1,16 +1,19 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../db/client';
 import { clerkClient } from '@clerk/express';
 import { createCompletion, streamCompletion } from '../services/llm/anthropic';
 import { PIPELINE_SYSTEM_PROMPT, ROLE_ANALYSIS_USER, RISK_ASSESSMENT_USER, AMLR_MAPPING_USER, TRAINING_PLAN_USER } from '../services/llm/pipelinePrompt';
-import { validateRoleProfile, validateRiskMatrix, validateAMLRMappings, validateTrainingPlan } from '../services/llm/pipelineValidator';
+import { validateRoleProfile, validateRiskMatrix, validateAMLRMappings, validateTrainingPlan, ValidationResult } from '../services/llm/pipelineValidator';
 import { searchChunks } from '../services/rag/vectorSearch';
+import { filterPII } from '../services/piiFilter';
 import { logger } from '../utils/logger';
 import { getUserContext } from '../utils/user';
 import { requireSignedIn, requireRole } from '../middleware/auth';
-import { getArchetype, mergePlanWithArchetype } from '../services/llm/archetypes';
+import { getArchetype } from '../services/llm/archetypes';
+import { mergePlanWithArchetype } from '../services/llm/archetypeMerge';
 import { evaluatePlan } from '../services/llm/qualityScorer';
-import type { PipelinePlan } from '../types';
+import type { PipelinePlan, RiskDimensionScore, TrainingModulePlan } from '../types';
 
 // ===========================================================================
 // Pipeline Router — AMLR 7-step training plan generator
@@ -19,9 +22,46 @@ import type { PipelinePlan } from '../types';
 
 export const pipelineRouter = Router();
 
+// ── Request body schemas ──
+// The AI-generated blobs (riskMatrix, mappings, trainingPlan) are already shape-checked
+// by pipelineValidator.ts on the way in from the LLM; here we just guard the primitives
+// and top-level structure so a malformed request fails fast with a clear 400.
+const RoleStepSchema = z.object({
+  roleDescription: z.string().optional(),
+  roleProfile: z.record(z.string(), z.unknown()).optional(),
+});
+const RiskOverrideSchema = z.object({
+  overrides: z.record(z.string(), z.object({
+    score: z.enum(['Low', 'Medium', 'High', 'Critical']),
+    justification: z.string().optional(),
+  })).optional(),
+  reviewerNote: z.string().optional(),
+});
+const AMLROverrideSchema = z.object({
+  mappings: z.array(z.unknown()),
+  reviewerNote: z.string().optional(),
+});
+const PlanOverrideSchema = z.object({
+  trainingPlan: z.record(z.string(), z.unknown()),
+  reviewerNote: z.string().optional(),
+});
+const ApproveSchema = z.object({
+  reviewer: z.string().optional(),
+});
+const AssignSchema = z.object({
+  userIds: z.union([z.string(), z.array(z.string())]),
+  dueDate: z.string().optional(),
+});
+
 // ── Auth gates ──
 // Every pipeline route needs signed-in user + admin role
 pipelineRouter.use(requireSignedIn, requireRole('admin'));
+
+// Plan columns (role_profile, risk_matrix, amlr_mappings, training_plan) come back
+// from pg either as parsed JSON or as a raw string depending on query path — normalize.
+function parseJsonColumn<T>(value: T | string): T {
+  return typeof value === 'string' ? JSON.parse(value) : value;
+}
 
 // Helper: enforce company scoping + fetch plan
 async function getScopedPlan(req: Request, res: Response):
@@ -144,7 +184,12 @@ pipelineRouter.patch('/:id/role', async (req: Request, res: Response) => {
   if (!result) return;
   const { planRow, ctx } = result;
 
-  const { roleDescription, roleProfile } = req.body;
+  const parsed = RoleStepSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { roleDescription, roleProfile } = parsed.data;
   const newVersion = planRow.version + 1;
 
   await db.query(
@@ -182,22 +227,13 @@ pipelineRouter.post('/:id/analyze-role', async (req: Request, res: Response) => 
   }
 
   const planId = req.params.id;
-  const userPrompt = `${ROLE_ANALYSIS_USER}\n\nROLE DESCRIPTION:\n${roleDescription}`;
+  const userPrompt = `${ROLE_ANALYSIS_USER}\n\nROLE DESCRIPTION:\n${filterPII(roleDescription)}`;
 
   try {
-    const rawOutput = await createCompletion({
-      system: PIPELINE_SYSTEM_PROMPT, prompt: userPrompt, maxTokens: 600, temperature: 0.1,
-    });
-
-    let validation = validateRoleProfile(rawOutput);
-    if (!validation.valid) {
-      logger.warn('Role analysis first attempt invalid, retrying');
-      const retryOutput = await createCompletion({
-        system: PIPELINE_SYSTEM_PROMPT + '\n\nCRITICAL: Output ONLY the JSON object. No markdown.',
-        prompt: userPrompt, maxTokens: 600, temperature: 0.0,
-      });
-      validation = validateRoleProfile(retryOutput);
-    }
+    const validation = await callAIWithValidatedRetry(
+      userPrompt, 600, 0.1, validateRoleProfile,
+      '\n\nCRITICAL: Output ONLY the JSON object. No markdown.',
+    );
 
     if (!validation.valid || !validation.data) {
       res.status(500).json({ error: 'Role analysis failed after retry', warnings: validation.warnings });
@@ -227,11 +263,27 @@ pipelineRouter.post('/:id/analyze-role', async (req: Request, res: Response) => 
 });
 
 // ===========================================================================
-// Helper: AI call with fallback
+// Helper: AI call → validate → retry once with a stricter system prompt
 // ===========================================================================
 
-async function callAIWithRetry(systemPrompt: string, userPrompt: string, maxTokens = 600, temperature = 0.1): Promise<string> {
-  return createCompletion({ system: systemPrompt, prompt: userPrompt, maxTokens, temperature });
+async function callAIWithValidatedRetry<T>(
+  userPrompt: string,
+  maxTokens: number,
+  temperature: number,
+  validate: (raw: string) => ValidationResult<T>,
+  retryInstruction: string,
+): Promise<ValidationResult<T>> {
+  const rawOutput = await createCompletion({ system: PIPELINE_SYSTEM_PROMPT, prompt: userPrompt, maxTokens, temperature });
+  let validation = validate(rawOutput);
+  if (!validation.valid) {
+    logger.warn('AI output invalid on first attempt, retrying');
+    const retryOutput = await createCompletion({
+      system: PIPELINE_SYSTEM_PROMPT + retryInstruction,
+      prompt: userPrompt, maxTokens, temperature: 0.0,
+    });
+    validation = validate(retryOutput);
+  }
+  return validation;
 }
 
 // ===========================================================================
@@ -253,13 +305,10 @@ pipelineRouter.post('/:id/assess-risk', async (req: Request, res: Response) => {
   const userPrompt = `${RISK_ASSESSMENT_USER}\n\nROLE PROFILE:\n${roleJson}`;
 
   try {
-    let rawOutput = await callAIWithRetry(PIPELINE_SYSTEM_PROMPT, userPrompt, 800, 0.1);
-    let validation = validateRiskMatrix(rawOutput);
-    if (!validation.valid) {
-      logger.warn('Risk matrix first attempt invalid, retrying');
-      const retryOutput = await callAIWithRetry(PIPELINE_SYSTEM_PROMPT + '\nCRITICAL: Output ONLY the JSON array. No markdown.', userPrompt, 800, 0.0);
-      validation = validateRiskMatrix(retryOutput);
-    }
+    const validation = await callAIWithValidatedRetry(
+      userPrompt, 800, 0.1, validateRiskMatrix,
+      '\nCRITICAL: Output ONLY the JSON array. No markdown.',
+    );
 
     if (!validation.valid || !validation.data) {
       res.status(500).json({ error: 'Risk assessment failed', warnings: validation.warnings });
@@ -299,12 +348,17 @@ pipelineRouter.patch('/:id/risk', async (req: Request, res: Response) => {
     return;
   }
 
-  const { overrides, reviewerNote } = req.body;
+  const parsed = RiskOverrideSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { overrides, reviewerNote } = parsed.data;
   const beforeState = planRow.risk_matrix;
-  let riskMatrix = typeof beforeState === 'string' ? JSON.parse(beforeState) : beforeState;
+  let riskMatrix = parseJsonColumn(beforeState);
 
   if (overrides && typeof overrides === 'object') {
-    riskMatrix = riskMatrix.map((dim: { dimension: string; score?: string; justification?: string }) => {
+    riskMatrix = riskMatrix.map((dim: RiskDimensionScore) => {
       const override = overrides[dim.dimension];
       if (override) return { ...dim, score: override.score, justification: override.justification || dim.justification };
       return dim;
@@ -334,7 +388,7 @@ async function executeAMLRMapping(planRow: PipelinePlan): Promise<{ mappings: un
   if (!planRow.role_profile || !planRow.risk_matrix) return null;
 
   const planId = planRow.id;
-  const roleProfile = typeof planRow.role_profile === 'string' ? JSON.parse(planRow.role_profile) : planRow.role_profile;
+  const roleProfile = parseJsonColumn(planRow.role_profile);
   const roleTitle = roleProfile.role_title || roleProfile.classified_as || 'this role';
 
   let articleExcerpts = '';
@@ -346,13 +400,10 @@ async function executeAMLRMapping(planRow: PipelinePlan): Promise<{ mappings: un
   }
 
   const userPrompt = `${AMLR_MAPPING_USER}\n\nROLE PROFILE AND RISK MATRIX:\n${JSON.stringify(roleProfile, null, 2)}\n${JSON.stringify(planRow.risk_matrix, null, 2)}\n\nREGULATORY EXCERPTS:\n${articleExcerpts}`;
-  let rawOutput = await callAIWithRetry(PIPELINE_SYSTEM_PROMPT, userPrompt, 3000, 0.1);
-
-  let validation = validateAMLRMappings(rawOutput);
-  if (!validation.valid) {
-    const retryOutput = await callAIWithRetry(PIPELINE_SYSTEM_PROMPT + '\nCRITICAL: Output ONLY the JSON array. Only AMLR Articles 9-15. No markdown.', userPrompt, 3000, 0.0);
-    validation = validateAMLRMappings(retryOutput);
-  }
+  const validation = await callAIWithValidatedRetry(
+    userPrompt, 3000, 0.1, validateAMLRMappings,
+    '\nCRITICAL: Output ONLY the JSON array. Only AMLR Articles 9-15. No markdown.',
+  );
 
   if (!validation.valid || !validation.data) return null;
 
@@ -397,7 +448,12 @@ pipelineRouter.patch('/:id/amlr', async (req: Request, res: Response) => {
     return;
   }
 
-  const { mappings, reviewerNote } = req.body;
+  const parsed = AMLROverrideSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { mappings, reviewerNote } = parsed.data;
   const beforeState = planRow.amlr_mappings;
   const newVersion = planRow.version + 1;
 
@@ -446,9 +502,9 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
   }
 
   const planId = planRow.id;
-  const roleProfile = typeof planRow.role_profile === 'string' ? JSON.parse(planRow.role_profile) : planRow.role_profile;
-  const riskMatrix = typeof planRow.risk_matrix === 'string' ? JSON.parse(planRow.risk_matrix) : planRow.risk_matrix;
-  const mappings = typeof planRow.amlr_mappings === 'string' ? JSON.parse(planRow.amlr_mappings) : planRow.amlr_mappings;
+  const roleProfile = parseJsonColumn(planRow.role_profile);
+  const riskMatrix = parseJsonColumn(planRow.risk_matrix);
+  const mappings = parseJsonColumn(planRow.amlr_mappings);
 
   let articleExcerpts = '';
   try {
@@ -538,7 +594,12 @@ pipelineRouter.patch('/:id/plan', async (req: Request, res: Response) => {
     return;
   }
 
-  const { trainingPlan, reviewerNote } = req.body;
+  const parsed = PlanOverrideSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { trainingPlan, reviewerNote } = parsed.data;
   const beforeState = planRow.training_plan;
   const newVersion = planRow.version + 1;
 
@@ -566,7 +627,12 @@ pipelineRouter.patch('/:id/approve', async (req: Request, res: Response) => {
     return;
   }
 
-  const { reviewer } = req.body;
+  const parsed = ApproveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { reviewer } = parsed.data;
   const newVersion = planRow.version + 1;
   const reviewerName = reviewer ?? ctx.userId;
 
@@ -621,12 +687,10 @@ pipelineRouter.get('/:id/assignments', async (req: Request, res: Response) => {
   );
 
   // Enrich each assignment row with module details from the training_plan JSONB
-  const plan = typeof planRow.training_plan === 'string'
-    ? JSON.parse(planRow.training_plan)
-    : planRow.training_plan;
+  const plan = parseJsonColumn(planRow.training_plan);
 
   const enriched = rows.map((row) => {
-    let moduleDetail: Record<string, unknown> | null = null;
+    let moduleDetail: TrainingModulePlan | null = null;
     for (const q of (plan?.quarters ?? [])) {
       if (q.quarter === row.quarter && Array.isArray(q.modules) && q.modules[row.module_index]) {
         moduleDetail = q.modules[row.module_index];
@@ -655,8 +719,13 @@ pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
     return;
   }
 
-  const { userIds, dueDate } = req.body;
-  const plan = typeof planRow.training_plan === 'string' ? JSON.parse(planRow.training_plan) : planRow.training_plan;
+  const parsed = AssignSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { userIds, dueDate } = parsed.data;
+  const plan = parseJsonColumn(planRow.training_plan);
   const users: string[] = Array.isArray(userIds) ? userIds : [userIds];
 
   // Resolve emails → Clerk user IDs so training.ts can match on userId

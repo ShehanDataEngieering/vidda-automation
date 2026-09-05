@@ -1,6 +1,7 @@
 import { db as pool } from '../../db/client';
 import { embedText } from './embeddings';
 import { rerankResults } from './reranker';
+import { fuseRrf } from './rrf';
 import { logger } from '../../utils/logger';
 
 export interface DocSearchResult {
@@ -118,12 +119,7 @@ export async function searchDocumentChunks(
     return rows.map(r => toResult(r, 0.1, false));
   }
 
-  const rrfScores = Array.from(allIds).map(id => ({
-    id,
-    rrf: 1 / (60 + (bm25Rank.get(id) ?? 9999)) + 1 / (60 + (vectorRank.get(id) ?? 9999)),
-  })).sort((a, b) => b.rrf - a.rrf);
-
-  const top15Ids = rrfScores.slice(0, 15).map(x => x.id);
+  const top15Ids = fuseRrf(bm25Rank, vectorRank, 15);
 
   // Fetch full child rows
   const bm25RowMap = new Map(bm25Rows.map(r => [r.id, r]));

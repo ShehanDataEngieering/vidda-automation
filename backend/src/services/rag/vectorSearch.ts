@@ -2,6 +2,7 @@ import { db } from '../../db/client';
 import type { SearchResult } from '../../types';
 import { embedText } from './embeddings';
 import { rerankResults } from './reranker';
+import { fuseRrf } from './rrf';
 import { logger } from '../../utils/logger';
 
 interface DbChunkRow {
@@ -75,15 +76,7 @@ export async function searchChunks(
   const vectorHits = vectorRank.size;
 
   // ── RRF fusion ─────────────────────────────────────────────────────────────
-  const allIds = new Set([...bm25Rank.keys(), ...vectorRank.keys()]);
-  const rrfScores: { id: string; rrf: number }[] = [];
-  for (const id of allIds) {
-    const bRank = bm25Rank.get(id) ?? 9999;
-    const vRank = vectorRank.get(id) ?? 9999;
-    rrfScores.push({ id, rrf: 1 / (60 + bRank) + 1 / (60 + vRank) });
-  }
-  rrfScores.sort((a, b) => b.rrf - a.rrf);
-  const top15Ids = rrfScores.slice(0, 15).map(x => x.id);
+  const top15Ids = fuseRrf(bm25Rank, vectorRank, 15);
 
   // Fetch full rows for top-15
   if (top15Ids.length === 0) {
@@ -110,7 +103,7 @@ export async function searchChunks(
   // ── Voyage reranking ───────────────────────────────────────────────────────
   const reranked = await rerankResults(searchTerm, ordered, Math.min(topK + 3, ordered.length));
 
-  logger.debug('vectorSearch done', { regulation, role, bm25Hits, vectorHits, rrfCandidates: allIds.size, reranked: reranked.length });
+  logger.debug('vectorSearch done', { regulation, role, bm25Hits, vectorHits, rrfCandidates: new Set([...bm25Rank.keys(), ...vectorRank.keys()]).size, reranked: reranked.length });
 
   return reranked.map(r => toSearchResult(r.item, r.score)).slice(0, topK);
 }

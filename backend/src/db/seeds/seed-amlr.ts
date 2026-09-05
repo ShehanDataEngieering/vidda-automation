@@ -158,30 +158,43 @@ The assessment shall be performed prior to taking up of activities by the employ
 async function main() {
   logger.info('Seeding enhanced AMLR 2024/1624 chunks...');
 
-  // Clear existing AMLR chunks to allow re-seeding with new granularity
-  await db.query(`DELETE FROM regulatory_chunks WHERE regulation = 'AMLR'`);
-  logger.info('Cleared existing AMLR chunks.');
-
-  // Build text list
+  // Embed before touching the DB — if the embedding API fails, the existing
+  // corpus is left untouched instead of already-deleted.
   const texts = AMLR_CHUNKS.map(c => c.content);
   logger.info(`Embedding ${texts.length} AMLR chunks...`);
-
   const embeddings = await embedTexts(texts);
 
+  // Delete + reinsert run in one transaction — a failure mid-loop rolls back
+  // to the prior corpus instead of leaving AMLR chunks partially cleared.
+  const client = await db.connect();
   let inserted = 0;
-  for (let i = 0; i < AMLR_CHUNKS.length; i++) {
-    const chunk = AMLR_CHUNKS[i]!;
-    const emb = embeddings[i];
-    if (!emb || emb.length === 0) continue;
+  try {
+    await client.query('BEGIN');
 
-    await db.query(
-      `INSERT INTO regulatory_chunks (regulation, article_number, article_reference, content, embedding)
-       VALUES ('AMLR', $1, $2, $3, $4::vector)
-       ON CONFLICT (regulation, article_number) DO UPDATE
-       SET content = $3, embedding = $4::vector`,
-      [chunk.articleNumber, chunk.articleReference, chunk.content, `[${emb.join(',')}]`],
-    );
-    inserted++;
+    await client.query(`DELETE FROM regulatory_chunks WHERE regulation = 'AMLR'`);
+    logger.info('Cleared existing AMLR chunks.');
+
+    for (let i = 0; i < AMLR_CHUNKS.length; i++) {
+      const chunk = AMLR_CHUNKS[i]!;
+      const emb = embeddings[i];
+      if (!emb || emb.length === 0) continue;
+
+      await client.query(
+        `INSERT INTO regulatory_chunks (regulation, article_number, article_reference, content, embedding)
+         VALUES ('AMLR', $1, $2, $3, $4::vector)
+         ON CONFLICT (regulation, article_number) DO UPDATE
+         SET content = $3, embedding = $4::vector`,
+        [chunk.articleNumber, chunk.articleReference, chunk.content, `[${emb.join(',')}]`],
+      );
+      inserted++;
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 
   // Verify
