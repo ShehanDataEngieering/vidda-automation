@@ -3,7 +3,7 @@ import { ShieldCheck, GitBranch, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GradientPanel } from '@/components/ui/gradient-panel';
 import { IconChip } from '@/components/ui/icon-chip';
-import { Logo, LogoMark } from '@/components/Logo';
+import { Logo } from '@/components/Logo';
 import { brand } from '@/lib/brand';
 import { PipelineStageArt } from '@/components/home/PipelineStageArt';
 import { ArchitectureDiagram } from '@/components/home/ArchitectureDiagram';
@@ -67,10 +67,6 @@ export default function Home() {
       {/* ── Hero ── */}
       <GradientPanel variant="dark" className="mx-6 max-w-6xl md:mx-auto">
         <div className="relative px-6 py-16 md:px-14 md:py-20 text-center">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: 'rgba(245,235,215,0.2)', color: brand.amberLight }}>
-            <LogoMark size={12} />
-            AMLR 2024/1624 — deadline 2027
-          </div>
           <h1 className="mx-auto max-w-3xl text-4xl md:text-5xl font-semibold tracking-tight" style={{ color: brand.creamTextBright, textWrap: 'balance' }}>
             Compliance training that reads{' '}
             <span style={accentSerif}>the regulation</span>
@@ -78,6 +74,11 @@ export default function Home() {
           <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed" style={{ color: brand.creamText, opacity: 0.85 }}>
             Vidda turns a job role into a defensible, article-cited AMLR training plan —
             role import, risk scoring, and regulator-ready audit trail, in minutes instead of weeks.
+          </p>
+          <p className="mx-auto mt-4 max-w-lg text-[13px] leading-relaxed" style={{ color: brand.creamText, opacity: 0.6 }}>
+            The EU's Anti-Money Laundering Regulation (2024/1624) takes effect in 2027, requiring
+            obliged entities to prove that AML training is role-specific and risk-appropriate —
+            not generic e-learning handed to every employee.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
             <Button
