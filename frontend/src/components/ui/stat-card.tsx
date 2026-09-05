@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { brand } from '@/lib/brand';
 
 export function StatCard({
   label, value, sub, icon: Icon, trend, className,
@@ -27,8 +28,8 @@ export function StatCard({
           )}
         </div>
         {Icon && (
-          <div className="h-9 w-9 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-            <Icon className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+          <div className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center" style={{ background: brand.espresso }}>
+            <Icon className="h-4 w-4" style={{ color: brand.amber }} />
           </div>
         )}
       </CardContent>

@@ -4,13 +4,14 @@ import { useUser } from '@clerk/react';
 import { toast } from 'sonner';
 import {
   Target, Plus, Users, CheckCircle2, Clock, AlertTriangle,
-  ArrowRight, Calendar, BarChart3, Loader2, Zap
+  ArrowRight, Calendar, BarChart3, Loader2
 } from 'lucide-react';
 import { useApi } from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/stat-card';
+import { brand } from '@/lib/brand';
 import type { PipelinePlan, PlanAssignment } from '../types-v6';
 
 /* ==========================================================================
@@ -74,8 +75,8 @@ export default function PipelinePage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-            <Target className="h-5 w-5 text-white dark:text-slate-900" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: brand.espresso }}>
+            <Target className="h-5 w-5" style={{ color: brand.amber }} />
           </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
@@ -219,32 +220,6 @@ export default function PipelinePage() {
               <Button variant="outline" className="w-full justify-start text-sm gap-2 h-9" onClick={() => navigate('/users')}>
                 <Users className="h-3.5 w-3.5" /> Manage Team
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-violet-200 dark:border-violet-800">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Zap className="h-4 w-4 text-violet-500" /> The Hard Problems We Solve
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs text-muted-foreground">
-              <div className="space-y-1">
-                <p className="font-semibold text-foreground">1. Free-text → Regulatory obligation</p>
-                <p>A job description is ambiguous text. We classify it into one of 5 AMLR role archetypes, score 5 risk dimensions, and map to specific articles — without hallucinating.</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-foreground">2. RAG on real regulation</p>
-                <p>Every article citation is grounded by retrieval from the actual AMLR 2024/1624 PDF. No invented obligations.</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-foreground">3. Audit trail for regulators</p>
-                <p>Every AI decision + human override is timestamped in an immutable event log — inspectable by the FCA or national supervisors.</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-foreground">4. Human-in-the-loop gates</p>
-                <p>Compliance officer must approve before anything touches employees. AI proposes; humans decide.</p>
-              </div>
             </CardContent>
           </Card>
 
