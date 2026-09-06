@@ -9,6 +9,7 @@ import { searchChunks } from '../services/rag/vectorSearch';
 import { filterPII } from '../services/piiFilter';
 import { logger } from '../utils/logger';
 import { getUserContext } from '../utils/user';
+import { asyncHandler } from '../utils/asyncHandler';
 import { requireSignedIn, requireRole } from '../middleware/auth';
 import { getArchetype } from '../services/llm/archetypes';
 import { mergePlanWithArchetype } from '../services/llm/archetypeMerge';
@@ -88,7 +89,7 @@ async function getScopedPlan(req: Request, res: Response):
 // LIST: all plans for this admin's company
 // ===========================================================================
 
-pipelineRouter.get('/', async (req: Request, res: Response) => {
+pipelineRouter.get('/', asyncHandler(async (req: Request, res: Response) => {
   const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
@@ -106,13 +107,13 @@ pipelineRouter.get('/', async (req: Request, res: Response) => {
     [ctx.companyId],
   );
   res.json(rows);
-});
+}));
 
 // ===========================================================================
 // CREATE empty plan (static route BEFORE dynamic /:id)
 // ===========================================================================
 
-pipelineRouter.post('/', async (req: Request, res: Response) => {
+pipelineRouter.post('/', asyncHandler(async (req: Request, res: Response) => {
   const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
@@ -121,14 +122,14 @@ pipelineRouter.post('/', async (req: Request, res: Response) => {
     [ctx.companyId, ctx.userId],
   );
   res.status(201).json({ planId: rows[0].id });
-});
+}));
 
 // ===========================================================================
 // Admin dashboard: all assignments across company plans
 // MUST be before /:id so Express doesn't match "assignments" as an id
 // ===========================================================================
 
-pipelineRouter.get('/assignments/all', async (req: Request, res: Response) => {
+pipelineRouter.get('/assignments/all', asyncHandler(async (req: Request, res: Response) => {
   const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
@@ -144,14 +145,14 @@ pipelineRouter.get('/assignments/all', async (req: Request, res: Response) => {
     [ctx.companyId],
   );
   res.json(rows);
-});
+}));
 
 // ===========================================================================
 // Approved plans (public within company)
 // MUST be before /:id so Express doesn't match "plans" as an id
 // ===========================================================================
 
-pipelineRouter.get('/plans/approved', async (req: Request, res: Response) => {
+pipelineRouter.get('/plans/approved', asyncHandler(async (req: Request, res: Response) => {
   const ctx = await getUserContext(req, res);
   if (!ctx) return;
 
@@ -163,23 +164,23 @@ pipelineRouter.get('/plans/approved', async (req: Request, res: Response) => {
     [ctx.companyId],
   );
   res.json(rows);
-});
+}));
 
 // ===========================================================================
 // FETCH single plan state — DYNAMIC routes after all static ones
 // ===========================================================================
 
-pipelineRouter.get('/:id', async (req: Request, res: Response) => {
+pipelineRouter.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   res.json(result.planRow);
-});
+}));
 
 // ===========================================================================
 // Step 1 — save raw role description (before AI analysis or with clarifications)
 // ===========================================================================
 
-pipelineRouter.patch('/:id/role', async (req: Request, res: Response) => {
+pipelineRouter.patch('/:id/role', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow, ctx } = result;
@@ -209,7 +210,7 @@ pipelineRouter.patch('/:id/role', async (req: Request, res: Response) => {
   );
 
   res.json({ ok: true, version: newVersion });
-});
+}));
 
 // ===========================================================================
 // Step 1+2: Role Import + Role Analysis
@@ -338,7 +339,7 @@ pipelineRouter.post('/:id/assess-risk', async (req: Request, res: Response) => {
 // Gate 1: Human Risk Review (override)
 // ===========================================================================
 
-pipelineRouter.patch('/:id/risk', async (req: Request, res: Response) => {
+pipelineRouter.patch('/:id/risk', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow, ctx } = result;
@@ -378,7 +379,7 @@ pipelineRouter.patch('/:id/risk', async (req: Request, res: Response) => {
   );
 
   res.json({ riskMatrix, version: newVersion, nextStep: 'amlr' });
-});
+}));
 
 // ===========================================================================
 // Step 4: AMLR Article Mapping (RAG)
@@ -422,7 +423,7 @@ async function executeAMLRMapping(planRow: PipelinePlan): Promise<{ mappings: un
   return { mappings: validation.data, warnings: validation.warnings };
 }
 
-pipelineRouter.post('/:id/map-amlr', async (req: Request, res: Response) => {
+pipelineRouter.post('/:id/map-amlr', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
 
@@ -432,13 +433,13 @@ pipelineRouter.post('/:id/map-amlr', async (req: Request, res: Response) => {
     return;
   }
   res.json({ amlrMappings: mappingResult.mappings, warnings: mappingResult.warnings, nextStep: 'plan' });
-});
+}));
 
 // ===========================================================================
 // Gate 2: Human AMLR Review
 // ===========================================================================
 
-pipelineRouter.patch('/:id/amlr', async (req: Request, res: Response) => {
+pipelineRouter.patch('/:id/amlr', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow, ctx } = result;
@@ -469,13 +470,13 @@ pipelineRouter.patch('/:id/amlr', async (req: Request, res: Response) => {
   );
 
   res.json({ amlrMappings: mappings, version: newVersion, nextStep: 'plan' });
-});
+}));
 
 // ===========================================================================
 // Regenerate AMLR after overrides
 // ===========================================================================
 
-pipelineRouter.post('/:id/regenerate-amlr', async (req: Request, res: Response) => {
+pipelineRouter.post('/:id/regenerate-amlr', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
 
@@ -485,7 +486,7 @@ pipelineRouter.post('/:id/regenerate-amlr', async (req: Request, res: Response) 
     return;
   }
   res.json({ amlrMappings: mappingResult.mappings, warnings: mappingResult.warnings, regenerated: true, nextStep: 'plan' });
-});
+}));
 
 // ===========================================================================
 // Step 5: Training Plan Generation (SSE streaming)
@@ -584,7 +585,7 @@ pipelineRouter.post('/:id/generate-plan', async (req: Request, res: Response) =>
 // Gate 3: Plan edit + approval
 // ===========================================================================
 
-pipelineRouter.patch('/:id/plan', async (req: Request, res: Response) => {
+pipelineRouter.patch('/:id/plan', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow, ctx } = result;
@@ -615,9 +616,9 @@ pipelineRouter.patch('/:id/plan', async (req: Request, res: Response) => {
   );
 
   res.json({ trainingPlan, version: newVersion });
-});
+}));
 
-pipelineRouter.patch('/:id/approve', async (req: Request, res: Response) => {
+pipelineRouter.patch('/:id/approve', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow, ctx } = result;
@@ -648,14 +649,14 @@ pipelineRouter.patch('/:id/approve', async (req: Request, res: Response) => {
   );
 
   res.json({ status: 'approved', version: newVersion });
-});
+}));
 
 pipelineRouter.post('/:id/regenerate-plan', (req: Request, res: Response) => {
   res.status(200).json({ redirect: `/api/pipeline/${req.params.id}/generate-plan`, message: 'Regeneration triggered. Call generate-plan.' });
 });
 
 // Audit trail — full event log for a plan (for regulators and demo)
-pipelineRouter.get('/:id/events', async (req: Request, res: Response) => {
+pipelineRouter.get('/:id/events', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
 
@@ -667,13 +668,13 @@ pipelineRouter.get('/:id/events', async (req: Request, res: Response) => {
     [req.params.id],
   );
   res.json(rows);
-});
+}));
 
 // ===========================================================================
 // Step 7: LMS Assignment
 // ===========================================================================
 
-pipelineRouter.get('/:id/assignments', async (req: Request, res: Response) => {
+pipelineRouter.get('/:id/assignments', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow } = result;
@@ -707,9 +708,9 @@ pipelineRouter.get('/:id/assignments', async (req: Request, res: Response) => {
   });
 
   res.json(enriched);
-});
+}));
 
-pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
+pipelineRouter.post('/:id/assign', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
   const { planRow } = result;
@@ -758,6 +759,6 @@ pipelineRouter.post('/:id/assign', async (req: Request, res: Response) => {
   }
 
   res.json({ ok: true, assigned: resolvedUserIds.length });
-});
+}));
 
 export default pipelineRouter;

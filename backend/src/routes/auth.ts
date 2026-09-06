@@ -3,6 +3,7 @@ import { clerkClient, getAuth } from '@clerk/express';
 import { z } from 'zod';
 import { requireSignedIn } from '../middleware/auth';
 import { getUserContext } from '../utils/user';
+import { asyncHandler } from '../utils/asyncHandler';
 
 export const authRouter = Router();
 
@@ -51,8 +52,8 @@ authRouter.post('/set-company', requireSignedIn, async (req: Request, res: Respo
  * GET /api/auth/me
  * Returns the current user's context extracted from Clerk session claims.
  */
-authRouter.get('/me', requireSignedIn, async (req: Request, res: Response) => {
+authRouter.get('/me', requireSignedIn, asyncHandler(async (req: Request, res: Response) => {
   const user = await getUserContext(req, res);
   if (!user) return; // getUserContext already sent 401/403
   res.json(user);
-});
+}));

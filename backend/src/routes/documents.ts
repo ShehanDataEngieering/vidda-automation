@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { requireSignedIn, requireRole } from '../middleware/auth';
 import { getUserContext } from '../utils/user';
+import { asyncHandler } from '../utils/asyncHandler';
 import { chunkPdf } from '../services/pdf/chunker';
 import { embedTexts } from '../services/rag/embeddings';
 import { db as pool } from '../db/client';
@@ -45,7 +46,7 @@ documentsRouter.post(
   requireSignedIn,
   requireRole('admin'),
   upload.single('pdf'),
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const user = await getUserContext(req, res);
     if (!user) return;
 
@@ -166,14 +167,14 @@ documentsRouter.post(
         );
       }
     });
-  },
+  }),
 );
 
 /**
  * GET /api/documents
  * List all documents for the admin's company.
  */
-documentsRouter.get('/', requireSignedIn, requireRole('admin'), async (req: Request, res: Response) => {
+documentsRouter.get('/', requireSignedIn, requireRole('admin'), asyncHandler(async (req: Request, res: Response) => {
   const user = await getUserContext(req, res);
   if (!user) return;
 
@@ -185,13 +186,13 @@ documentsRouter.get('/', requireSignedIn, requireRole('admin'), async (req: Requ
     [user.companyId],
   );
   res.json(rows);
-});
+}));
 
 /**
  * GET /api/documents/:id/status
  * Poll chunking status for a single document.
  */
-documentsRouter.get('/:id/status', requireSignedIn, requireRole('admin'), async (req: Request, res: Response) => {
+documentsRouter.get('/:id/status', requireSignedIn, requireRole('admin'), asyncHandler(async (req: Request, res: Response) => {
   const user = await getUserContext(req, res);
   if (!user) return;
 
@@ -204,13 +205,13 @@ documentsRouter.get('/:id/status', requireSignedIn, requireRole('admin'), async 
     return;
   }
   res.json(rows[0]);
-});
+}));
 
 /**
  * DELETE /api/documents/:id
  * Delete a document and all its chunks (cascades via FK).
  */
-documentsRouter.delete('/:id', requireSignedIn, requireRole('admin'), async (req: Request, res: Response) => {
+documentsRouter.delete('/:id', requireSignedIn, requireRole('admin'), asyncHandler(async (req: Request, res: Response) => {
   const user = await getUserContext(req, res);
   if (!user) return;
 
@@ -223,4 +224,4 @@ documentsRouter.delete('/:id', requireSignedIn, requireRole('admin'), async (req
     return;
   }
   res.json({ ok: true });
-});
+}));
