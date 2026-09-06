@@ -29,8 +29,10 @@ const PORT = process.env.PORT ?? 3001;
 const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(',').map((o) => o.trim());
 
 app.use(helmet({
-  // Some environments embed the frontend in an iframe on the same origin.
-  crossOriginResourcePolicy: { policy: 'same-site' },
+  // Frontend and backend are deployed on different sites (Vercel/Render);
+  // `cors()` below is the actual access control via the FRONTEND_URL allowlist.
+  // A same-site CORP policy would block those legitimate cross-site fetches.
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 app.use(cors({
   origin: allowedOrigins,
