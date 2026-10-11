@@ -713,7 +713,7 @@ pipelineRouter.get('/:id/assignments', asyncHandler(async (req: Request, res: Re
 pipelineRouter.post('/:id/assign', asyncHandler(async (req: Request, res: Response) => {
   const result = await getScopedPlan(req, res);
   if (!result) return;
-  const { planRow } = result;
+  const { ctx, planRow } = result;
 
   if (!planRow.training_plan || planRow.status !== 'approved') {
     res.status(400).json({ error: 'Plan not approved or not generated.' });
@@ -729,20 +729,24 @@ pipelineRouter.post('/:id/assign', asyncHandler(async (req: Request, res: Respon
   const plan = parseJsonColumn(planRow.training_plan);
   const users: string[] = Array.isArray(userIds) ? userIds : [userIds];
 
-  // Resolve emails → Clerk user IDs so training.ts can match on userId
+  // Resolve emails → Clerk user IDs so training.ts can match on userId.
+  // Only users in this admin's company may be assigned — otherwise the plan
+  // would leak to another tenant via /api/training/my-plan.
   const resolvedUserIds: string[] = [];
   for (const input of users) {
+    let clerkUser: Awaited<ReturnType<typeof clerkClient.users.getUser>> | undefined;
     if (input.includes('@')) {
       const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [input] });
-      if (clerkUsers.data.length > 0) {
-        resolvedUserIds.push(clerkUsers.data[0].id);
-      } else {
-        res.status(404).json({ error: `No Clerk user found for email: ${input}` });
-        return;
-      }
+      clerkUser = clerkUsers.data[0];
     } else {
-      resolvedUserIds.push(input); // already a Clerk userId
+      clerkUser = await clerkClient.users.getUser(input).catch(() => undefined);
     }
+    const meta = clerkUser?.publicMetadata as Record<string, unknown> | undefined;
+    if (!clerkUser || meta?.companyId !== ctx.companyId) {
+      res.status(404).json({ error: `No user in your company found for: ${input}` });
+      return;
+    }
+    resolvedUserIds.push(clerkUser.id);
   }
 
   for (const userId of resolvedUserIds) {

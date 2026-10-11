@@ -146,6 +146,15 @@ usersRouter.delete('/invitations/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
+    // Only revoke invitations that belong to this admin's company
+    const { data: pending } = await clerkClient.invitations.getInvitationList({ status: 'pending', limit: 500 });
+    const invitation = pending.find(inv => inv.id === id);
+    const invMeta = invitation?.publicMetadata as Record<string, unknown> | undefined;
+    if (!invitation || invMeta?.companyId !== ctx.companyId) {
+      res.status(404).json({ error: 'Invitation not found' });
+      return;
+    }
+
     await clerkClient.invitations.revokeInvitation(id);
     logger.info('Invitation revoked', { invitationId: id, companyId: ctx.companyId });
     res.json({ ok: true });
