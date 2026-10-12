@@ -134,9 +134,11 @@ CREATE TABLE IF NOT EXISTS training_plans (
 
 CREATE INDEX IF NOT EXISTS idx_training_plans_company ON training_plans(company_id, status);
 
+-- Append-only audit trail. No FK to training_plans on purpose: history must
+-- outlive the plan. UPDATE/DELETE/TRUNCATE are blocked by triggers below.
 CREATE TABLE IF NOT EXISTS plan_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  plan_id UUID NOT NULL REFERENCES training_plans(id) ON DELETE CASCADE,
+  plan_id UUID NOT NULL,
   version INTEGER NOT NULL,
   step VARCHAR(20) NOT NULL,
   action VARCHAR(30) NOT NULL
@@ -149,6 +151,22 @@ CREATE TABLE IF NOT EXISTS plan_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_plan_events_plan ON plan_events(plan_id, version);
+
+CREATE OR REPLACE FUNCTION plan_events_append_only() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'plan_events is an append-only audit trail; % is not allowed', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS plan_events_no_update_delete ON plan_events;
+CREATE TRIGGER plan_events_no_update_delete
+  BEFORE UPDATE OR DELETE ON plan_events
+  FOR EACH ROW EXECUTE FUNCTION plan_events_append_only();
+
+DROP TRIGGER IF EXISTS plan_events_no_truncate ON plan_events;
+CREATE TRIGGER plan_events_no_truncate
+  BEFORE TRUNCATE ON plan_events
+  FOR EACH STATEMENT EXECUTE FUNCTION plan_events_append_only();
 
 CREATE TABLE IF NOT EXISTS plan_assignments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
