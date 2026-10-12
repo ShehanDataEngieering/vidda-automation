@@ -25,6 +25,10 @@ for (const key of REQUIRED_ENV) {
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
+// Render puts one proxy in front of the app. Without this, req.ip is the proxy's
+// address and every client shares a single rate-limit bucket.
+app.set('trust proxy', 1);
+
 // Comma-separated list of allowed frontend origins, e.g. "https://vidda.app,http://localhost:5173"
 const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(',').map((o) => o.trim());
 
@@ -57,6 +61,15 @@ const pipelineLimiter = rateLimit({
   legacyHeaders: false,
 });
 app.use('/api/pipeline', pipelineLimiter);
+
+// PDF uploads are chunked and embedded via Voyage — also costly per request
+const uploadLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/documents/upload', uploadLimiter);
 
 // Clerk session parsing
 app.use(clerkMiddleware());
